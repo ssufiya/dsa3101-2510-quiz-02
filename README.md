@@ -1,4 +1,4 @@
-\# DSA3101: Quiz Bank Project
+# DSA3101: Quiz Bank Project
 
 
 
