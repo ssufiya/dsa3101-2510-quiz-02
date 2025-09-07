@@ -2,3 +2,7 @@
 "__pycache__/" 
 "*.pyc" 
 ".DS_Store" 
+question-bank/api/storage/
+node_modules/
+.env
+.DS_Store
