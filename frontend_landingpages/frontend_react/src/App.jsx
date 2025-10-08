@@ -2,33 +2,38 @@ import { useState } from 'react';
 import './App.css';
 import { LoginForm } from './pages/loginpage.jsx';
 import { Homepage } from './pages/homepage_dashboard.jsx';
+import { UploadCSV } from './pages/uploadcsv.jsx'
 
 export default function App() {
-  const [currentScreen, setCurrentScreen] = useState("login"); // "login" or "dashboard"
+  const [currentScreen, setCurrentScreen] = useState("login"); // "login", "dashboard", "upload"
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
-  // Function to call when login is successful
+
   const handleLogin = () => {
     setIsLoggedIn(true);
     setCurrentScreen("dashboard");
   };
 
-  // Function to log out (optional)
   const handleLogout = () => {
     setIsLoggedIn(false);
     setCurrentScreen("login");
   };
 
-  // Render logic
+  const goToUpload = () => setCurrentScreen("upload");
+  const goToDashboard = () => setCurrentScreen("dashboard");
+
   if (!isLoggedIn) {
     return <LoginForm onLogin={handleLogin} />;
   }
 
   if (currentScreen === "dashboard") {
-    return <Homepage/>;
+    return <Homepage onLogout={handleLogout} onGoToUpload={goToUpload} />;
+  }
+
+  if (currentScreen === "upload") {
+    return <UploadCSV onBack={goToDashboard}/>;
   }
 
   // fallback
   return null;
 }
-
