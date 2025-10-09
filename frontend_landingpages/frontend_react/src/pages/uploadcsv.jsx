@@ -12,6 +12,7 @@ import {
 //creates internal variable for the component instance
 
 export function UploadCSV({ onBack }) {
+
   const [uploadStatus, setUploadStatus] = useState({ status: "idle" });
   const [uploadedQuestions, setUploadedQuestions] = useState([]);
   const fileInputRef = useRef(null);
