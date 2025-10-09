@@ -10,7 +10,7 @@ import {
   AlertCircle, Download 
 } from 'lucide-react';
 
-export function Homepage({ onLogout, onCreateQuiz, onEditQuiz, onViewQuiz, onLibrary, onGoToUpload }) {
+export function Homepage({ onLogout, onCreateQuiz, onEditQuiz, onViewQuiz, onGoToQuestionLibrary, onGoToUpload }) {
   // Sample quiz data - empty initially
   const [quizzes] = useState([]);
 
@@ -31,7 +31,7 @@ export function Homepage({ onLogout, onCreateQuiz, onEditQuiz, onViewQuiz, onLib
               </div>
             </div>
             <div className="flex items-center space-x-4">
-              <Button variant="outline" onClick={onLibrary} className="flex items-center space-x-2">
+              <Button variant="outline" onClick={onGoToQuestionLibrary} className="flex items-center space-x-2">
                 <HelpCircle className="h-4 w-4" />
                 <span>Question Library</span>
               </Button>

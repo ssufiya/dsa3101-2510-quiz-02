@@ -6,7 +6,7 @@ import { Badge } from "../components/badge";
 import { ArrowLeft, Eye, Plus, X, FileText, BarChart3, GripVertical, HelpCircle,} from "lucide-react";
 import { ScrollArea } from "../components/scrollarea";
 
-// Question card component (no drag)
+// Question card component
 function QuestionCard({ question, onViewQuestion, onAddToPreview }) {
   const getTypeColor = (type) => {
     switch (type) {
@@ -29,7 +29,9 @@ function QuestionCard({ question, onViewQuestion, onAddToPreview }) {
         <div className="flex justify-between items-start mb-3">
           <div className="flex items-center space-x-2">
             <GripVertical className="h-4 w-4 text-muted-foreground" />
-            <Badge className={getTypeColor(question.type)}>{question.type}</Badge>
+            <Badge className={getTypeColor(question.type)}>
+              {question.type}
+            </Badge>
           </div>
           <div className="flex items-center space-x-1 text-sm text-muted-foreground">
             <BarChart3 className="h-4 w-4" />
@@ -96,8 +98,8 @@ function QuestionCard({ question, onViewQuestion, onAddToPreview }) {
   );
 }
 
-// Preview area (no drop zone)
-function PreviewArea({ previewQuestions, onRemoveFromPreview, onClearPreview }) {
+// Preview area
+{/*function PreviewArea({ previewQuestions, onRemoveFromPreview, onClearPreview }) {
   return (
     <div className="w-80 bg-white border-l border-gray-200 h-full flex flex-col">
       <div className="p-4 border-b border-gray-200">
@@ -170,9 +172,9 @@ function PreviewArea({ previewQuestions, onRemoveFromPreview, onClearPreview }) 
       )}
     </div>
   );
-}
+} */}
 
-export function Library({ onBack, onViewQuestion }) {
+export function QuestionLibrary({ onBack, onViewQuestion }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedSubject, setSelectedSubject] = useState("all");
   const [selectedDifficulty, setSelectedDifficulty] = useState("all");
@@ -181,7 +183,6 @@ export function Library({ onBack, onViewQuestion }) {
   const [previewQuestions, setPreviewQuestions] = useState([]);
 
   const [libraryQuestions] = useState([
-    // sample data
     {
       id: 1,
       academicYear: "2024",
@@ -190,7 +191,8 @@ export function Library({ onBack, onViewQuestion }) {
       courseName: "Programming Methodology",
       author: "Dr. Tan",
       institution: "NUS",
-      question: "Explain the difference between pass-by-value and pass-by-reference.",
+      question:
+        "Explain the difference between pass-by-value and pass-by-reference.",
       subject: "Computer Science",
       difficulty: "Medium",
       usageCount: 10,
@@ -214,6 +216,15 @@ export function Library({ onBack, onViewQuestion }) {
     },
   ]);
 
+  const subjects = ["all", "Computer Science", "Mathematics"];
+  const difficulties = ["all", "Easy", "Medium", "Hard"];
+  const courses = [
+    "all",
+    "CS1010 - Programming Methodology",
+    "MA1101R - Linear Algebra I",
+  ];
+  const types = ["all", "Multiple Choice", "True/False", "Short Answer", "Essay"];
+
   const addToPreview = (questionId) => {
     const question = libraryQuestions.find((q) => q.id === questionId);
     if (question && !previewQuestions.find((q) => q.id === questionId)) {
@@ -233,7 +244,9 @@ export function Library({ onBack, onViewQuestion }) {
       q.courseCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
       q.author.toLowerCase().includes(searchTerm.toLowerCase()) ||
       q.tags.some((t) => t.toLowerCase().includes(searchTerm.toLowerCase()));
-    const matchesSubject = selectedSubject === "all" || q.subject === selectedSubject;
+
+    const matchesSubject =
+      selectedSubject === "all" || q.subject === selectedSubject;
     const matchesDifficulty =
       selectedDifficulty === "all" || q.difficulty === selectedDifficulty;
     const matchesCourse =
@@ -267,7 +280,7 @@ export function Library({ onBack, onViewQuestion }) {
                   <HelpCircle className="h-6 w-6 text-primary-foreground" />
                 </div>
                 <div>
-                  <h1 className="text-xl">Question Library</h1>
+                  <h1 className="text-xl font-semibold">Question Library</h1>
                   <p className="text-sm text-muted-foreground">
                     Browse questions from other professors
                   </p>
@@ -276,6 +289,60 @@ export function Library({ onBack, onViewQuestion }) {
             </div>
           </div>
         </header>
+
+        {/* Filters */}
+        <div className="bg-white border-b border-gray-200 px-6 py-4 flex flex-wrap gap-4">
+          <Input
+            placeholder="Search by keyword..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-64"
+          />
+          <select
+            className="border border-gray-300 rounded-md px-2 py-1"
+            value={selectedSubject}
+            onChange={(e) => setSelectedSubject(e.target.value)}
+          >
+            {subjects.map((sub) => (
+              <option key={sub} value={sub}>
+                {sub}
+              </option>
+            ))}
+          </select>
+          <select
+            className="border border-gray-300 rounded-md px-2 py-1"
+            value={selectedDifficulty}
+            onChange={(e) => setSelectedDifficulty(e.target.value)}
+          >
+            {difficulties.map((dif) => (
+              <option key={dif} value={dif}>
+                {dif}
+              </option>
+            ))}
+          </select>
+          <select
+            className="border border-gray-300 rounded-md px-2 py-1"
+            value={selectedCourse}
+            onChange={(e) => setSelectedCourse(e.target.value)}
+          >
+            {courses.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+          <select
+            className="border border-gray-300 rounded-md px-2 py-1"
+            value={selectedType}
+            onChange={(e) => setSelectedType(e.target.value)}
+          >
+            {types.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+        </div>
 
         {/* Question list */}
         <div className="p-6 grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
@@ -290,11 +357,11 @@ export function Library({ onBack, onViewQuestion }) {
         </div>
       </div>
 
-      <PreviewArea
+      {/* <PreviewArea
         previewQuestions={previewQuestions}
         onRemoveFromPreview={removeFromPreview}
         onClearPreview={clearPreview}
-      />
+      /> */}
     </div>
   );
 }
