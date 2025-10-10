@@ -10,9 +10,10 @@ import {
   AlertCircle, Download 
 } from 'lucide-react';
 
-export function Homepage({ onLogout, onCreateQuiz, onEditQuiz, onViewQuiz, onLibrary }) {
+export function Homepage({ onLogout, onCreateQuiz, onEditQuiz, onViewQuiz, onGoToQuestionLibrary, onGoToUpload }) {
   // Sample quiz data - empty initially
   const [quizzes] = useState([]);
+
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -30,7 +31,7 @@ export function Homepage({ onLogout, onCreateQuiz, onEditQuiz, onViewQuiz, onLib
               </div>
             </div>
             <div className="flex items-center space-x-4">
-              <Button variant="outline" onClick={onLibrary} className="flex items-center space-x-2">
+              <Button variant="outline" onClick={onGoToQuestionLibrary} className="flex items-center space-x-2">
                 <HelpCircle className="h-4 w-4" />
                 <span>Question Library</span>
               </Button>
@@ -80,16 +81,17 @@ export function Homepage({ onLogout, onCreateQuiz, onEditQuiz, onViewQuiz, onLib
           </Card>
         </div>
 
-        {/* Quiz Management */}
+        {/* Quiz Upload */}
         <div className="flex justify-between items-center mb-6">
           <div>
-            <h2 className="text-2xl">Your Quizzes</h2>
-            <p className="text-muted-foreground">Manage and organize your quiz collection</p>
+            <h2 className="text-2xl">Upload Quizzes</h2>
+            <p className="text-muted-foreground">Add your latest quiz to the repository!</p>
           </div>
-          <Button onClick={onCreateQuiz} className="flex items-center space-x-2">
+          <Button onClick={onGoToUpload} className="flex items-center space-x-2">
             <Plus className="h-4 w-4" />
-            <span>Create New Quiz</span>
+            <span>Click Here!</span>
           </Button>
+
         </div>
 
         {/* Quiz Grid */}
