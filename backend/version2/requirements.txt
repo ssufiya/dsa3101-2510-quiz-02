@@ -1,0 +1,6 @@
+Flask
+pandas
+SQLAlchemy
+psycopg2-binary
+flask_sqlalchemy
+Werkzeug

@@ -1,57 +1,45 @@
 import { useState } from 'react';
 import './App.css';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { LoginForm } from './pages/loginpage.jsx';
 import { Homepage } from './pages/homepage_dashboard.jsx';
-import { UploadQuestions } from './pages/uploadcsv.jsx';
-
+import { UploadCSV } from './pages/uploadcsv.jsx';
+import { QuestionLibrary } from './pages/question_library.jsx';
 
 export default function App() {
-  const [currentScreen, setCurrentScreen] = useState("login"); // "login" or "dashboard"
+  const [currentScreen, setCurrentScreen] = useState("login"); // "login", "dashboard", "upload"
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
-  // Function to call when login is successful
+
   const handleLogin = () => {
     setIsLoggedIn(true);
     setCurrentScreen("dashboard");
   };
 
-  // Function to log out (optional)
   const handleLogout = () => {
     setIsLoggedIn(false);
     setCurrentScreen("login");
   };
 
-  // Render logic
-  /* if (!isLoggedIn) {
+  const goToUpload = () => setCurrentScreen("upload");
+  const goToDashboard = () => setCurrentScreen("dashboard");
+  const goToQuestionLibrary = () => setCurrentScreen("questionlibrary");
+
+  if (!isLoggedIn) {
     return <LoginForm onLogin={handleLogin} />;
   }
 
   if (currentScreen === "dashboard") {
-    return <Homepage/>;
+    return <Homepage onLogout={handleLogout} onGoToUpload={goToUpload} onGoToQuestionLibrary={goToQuestionLibrary} />;
   }
- */
-  // test upload csv page
 
-  return (
-    <Router>
-      <Routes>
-        {/* 👇 This special route lets you test UploadQuestions directly */}
-        <Route path="/uploadcsv" element={<UploadQuestions onBack={() => window.history.back()} />} />
+  if (currentScreen === "upload") {
+    return <UploadCSV onBack={goToDashboard}/>;
+  }
 
-        {/* 👇 Everything else uses your existing screen logic */}
-        <Route
-          path="*"
-          element={
-            !isLoggedIn ? (
-              <LoginForm onLogin={handleLogin} />
-            ) : currentScreen === "dashboard" ? (
-              <Homepage />
-            ) : null
-          }
-        />
-      </Routes>
-    </Router>
-  );
+  if (currentScreen === "questionlibrary") {
+    return <QuestionLibrary onBack={goToDashboard}/>
+  }
+
+  // fallback
+  return null;
 }
-

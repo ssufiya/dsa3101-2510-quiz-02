@@ -1,0 +1,32 @@
+version: '3.9'
+services:
+  db:
+    image: postgres:14
+    container_name: flask_postgres_db_version2
+    restart: always
+    environment:
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: mypassword
+      POSTGRES_DB: quiz_bank_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/  
+    ports:
+      - "5432:5432"
+  
+  web:
+    build: .
+    container_name: flask_web_app
+    restart: always
+    environment:
+      - FLASK_ENV=development
+      - DATABASE_URL=postgresql://myuser:mypassword@db:5432/quiz_bank_db
+    depends_on:
+      - db
+    ports:
+      - "5002:5000" 
+    volumes:
+      - .:/app
+
+volumes:
+  postgres_data:
