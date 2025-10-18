@@ -10,10 +10,10 @@ services:
       POSTGRES_DB: quiz_bank_db
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./init.sql:/docker-entrypoint-initdb.d/  
     ports:
       - "5432:5432"
-
+  
   web:
     build: .
     container_name: flask_web_app
@@ -24,10 +24,9 @@ services:
     depends_on:
       - db
     ports:
-      - "5002:5000"
+      - "5002:5000" 
     volumes:
       - .:/app
 
 volumes:
   postgres_data:
-

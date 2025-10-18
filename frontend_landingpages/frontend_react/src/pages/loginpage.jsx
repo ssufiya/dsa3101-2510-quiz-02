@@ -49,7 +49,7 @@ export function LoginForm({ onLogin }) {
   //using tailwindCSS for ui
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-      <Card className="w-full max-w-md shadow-lg">
+      <Card className="w-full max-w-sm shadow-lg p-8">
         <CardHeader className="text-center space-y-4">
           <div className="flex justify-center">
             <div className="bg-primary rounded-full p-3">
