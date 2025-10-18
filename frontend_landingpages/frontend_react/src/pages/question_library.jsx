@@ -7,7 +7,7 @@ import { ArrowLeft, Eye, Plus, X, FileText, BarChart3, GripVertical, HelpCircle,
 import { ScrollArea } from "../components/scrollarea";
 
 // Question card component
-function QuestionCard({ question, onViewQuestion, onAddToPreview }) {
+function QuestionCard({ question, onQuestionDetails, onAddToPreview }) {
   const getTypeColor = (type) => {
     switch (type) {
       case "Multiple Choice":
@@ -78,7 +78,7 @@ function QuestionCard({ question, onViewQuestion, onAddToPreview }) {
               variant="outline"
               size="sm"
               className="flex-1"
-              onClick={() => onViewQuestion(question.id)}
+              onClick={() => onQuestionDetails(question.id)}
             >
               <Eye className="h-4 w-4 mr-1" />
               View Details
@@ -98,83 +98,8 @@ function QuestionCard({ question, onViewQuestion, onAddToPreview }) {
   );
 }
 
-// Preview area
-{/*function PreviewArea({ previewQuestions, onRemoveFromPreview, onClearPreview }) {
-  return (
-    <div className="w-80 bg-white border-l border-gray-200 h-full flex flex-col">
-      <div className="p-4 border-b border-gray-200">
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="text-lg flex items-center space-x-2">
-            <FileText className="h-5 w-5" />
-            <span>Question Preview</span>
-          </h3>
-          {previewQuestions.length > 0 && (
-            <Button variant="ghost" size="sm" onClick={onClearPreview}>
-              Clear All
-            </Button>
-          )}
-        </div>
-        <p className="text-sm text-muted-foreground">
-          {previewQuestions.length} question
-          {previewQuestions.length !== 1 ? "s" : ""} selected
-        </p>
-      </div>
 
-      <div className="flex-1 p-4">
-        {previewQuestions.length === 0 ? (
-          <div className="text-center py-8">
-            <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <h4 className="mb-2">No questions selected</h4>
-            <p className="text-sm text-muted-foreground">
-              Use "Add to Preview" to select questions.
-            </p>
-          </div>
-        ) : (
-          <ScrollArea className="h-full">
-            <div className="space-y-4">
-              {previewQuestions.map((question, index) => (
-                <Card key={question.id} className="relative">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="absolute top-2 right-2 h-6 w-6 p-0"
-                    onClick={() => onRemoveFromPreview(question.id)}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                  <CardHeader className="pb-3">
-                    <div className="flex items-center space-x-2 mb-2">
-                      <span className="text-sm font-medium text-muted-foreground">
-                        Q{index + 1}
-                      </span>
-                      <Badge variant="secondary" className="text-xs">
-                        {question.type}
-                      </Badge>
-                    </div>
-                    <CardDescription className="text-xs">
-                      {question.courseCode} - {question.courseName}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="pt-0">
-                    <p className="text-sm line-clamp-3">{question.question}</p>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </ScrollArea>
-        )}
-      </div>
-
-      {previewQuestions.length > 0 && (
-        <div className="p-4 border-t border-gray-200">
-          <Button className="w-full">Create Quiz from Preview</Button>
-        </div>
-      )}
-    </div>
-  );
-} */}
-
-export function QuestionLibrary({ onBack, onViewQuestion }) {
+export function QuestionLibrary({ onBack, onQuestionDetails }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedSubject, setSelectedSubject] = useState("all");
   const [selectedDifficulty, setSelectedDifficulty] = useState("all");
@@ -350,7 +275,7 @@ export function QuestionLibrary({ onBack, onViewQuestion }) {
             <QuestionCard
               key={q.id}
               question={q}
-              onViewQuestion={onViewQuestion}
+              onQuestionDetails={onQuestionDetails}
               onAddToPreview={addToPreview}
             />
           ))}
