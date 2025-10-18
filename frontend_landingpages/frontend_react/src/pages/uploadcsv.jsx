@@ -8,6 +8,7 @@ import {
   ArrowLeft, Upload, FileText, CheckCircle, AlertCircle, 
   Download, Trash2
 } from 'lucide-react';
+import axios from 'axios';
 
 //creates internal variable for the component instance
 
@@ -29,53 +30,16 @@ export function UploadCSV({ onBack }) {
         return "bg-gray-100 text-gray-800";
     }
   };
-
-  //process csv file
-  const parseCSV = (text) => {
-    const lines = text.trim().split("\n");
-    const headers = lines[0].split(",").map((h) => h.trim().replace(/"/g, ""));
-    const questions = [];
-
-    for (let i = 1; i < lines.length; i++) {
-      const values = lines[i].split(",").map((v) => v.trim().replace(/"/g, ""));
-      if (values.length < headers.length) continue;
-
-      const question = {
-        id: `uploaded-${Date.now()}-${i}`,
-        text: values[headers.indexOf("question")] || "",
-        options: [
-          values[headers.indexOf("option_a")] || "",
-          values[headers.indexOf("option_b")] || "",
-          values[headers.indexOf("option_c")] || "",
-          values[headers.indexOf("option_d")] || "",
-        ].filter((option) => option),
-        correctAnswer: parseInt(values[headers.indexOf("correct_answer")]) || 0,
-        difficulty: values[headers.indexOf("difficulty")] || "Medium",
-        courseName: values[headers.indexOf("course_name")] || "",
-        courseCode: values[headers.indexOf("course_code")] || "",
-        type: values[headers.indexOf("type")] || "Multiple Choice",
-        tags: values[headers.indexOf("tags")]
-          ? values[headers.indexOf("tags")].split(";")
-          : [],
-      };
-
-      if (question.text && question.courseName && question.courseCode) {
-        questions.push(question);
-      }
-    }
-
-    return questions;
-  };
-
-  //error if not csv file
+  
   const handleFileUpload = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    if (!file.name.toLowerCase().endsWith(".csv")) {
+    //error if not csv file
+    if (!file.name.toLowerCase().endsWith(".csv") && !file.name.toLowerCase().endsWith(".zip")) {
       setUploadStatus({
         status: "error",
-        message: "Please upload a CSV file only.",
+        message: "Please upload a CSV or ZIP file only.",
       });
       return;
     }
@@ -83,56 +47,61 @@ export function UploadCSV({ onBack }) {
     setUploadStatus({ status: "uploading", progress: 0 });
 
     try {
-      const text = await file.text();
-      setUploadStatus({ status: "parsing", progress: 50 });
+    // Build FormData to send to backend
+    const formData = new FormData();
+    formData.append("file", file);
 
-      setTimeout(() => {
-        try {
-          const questions = parseCSV(text);
+    // Send request to your backend
+    const response = await axios.post("/upload", formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+      onUploadProgress: (progressEvent) => {
+        const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+        setUploadStatus({ status: "uploading", progress });
+      },
+    });
+    //check if progressEvent.Total is provided in the browser
 
-          if (questions.length === 0) {
-            setUploadStatus({
-              status: "error",
-              message:
-                "No valid questions found in the CSV file. Please check the format.",
-            });
-            return;
-          }
+    const data = response.data;
+    setUploadStatus({
+      status: "success",
+      message: data.message || "File uploaded successfully!",
+      progress: 100,
+    });
 
-          setUploadedQuestions((prev) => [...prev, ...questions]);
-          setUploadStatus({
-            status: "success",
-            message: `Successfully uploaded ${questions.length} questions!`,
-            questionsProcessed: questions.length,
-            totalQuestions: questions.length,
-            progress: 100,
-          });
-
-          // Reset after 3 seconds
-          setTimeout(() => {
-            setUploadStatus({ status: "idle" });
-          }, 3000);
-        } catch (error) {
-          setUploadStatus({
-            status: "error",
-            message:
-              "Error parsing CSV file. Please check the format and try again.",
-          });
-        }
-      }, 1000);
-    } catch (error) {
-      setUploadStatus({
-        status: "error",
-        message: "Error reading file. Please try again.",
-      });
+    // show how many questions addedd
+    if (data.questions_added) {
+      setUploadedQuestions((prev) => [
+        ...prev,
+        { id: `upload-${Date.now()}`, text: `${data.questions_added} questions added` },
+      ]);
     }
 
-    // Reset file input
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
-  };
+    setTimeout(() => {
+      setUploadStatus({ status: "idle" });
+    }, 3000);
 
+    //handle error
+  } catch (error) {
+    console.error("Upload error:", error);
+    const message =
+      error.response?.data?.error ||
+      error.message ||
+      "Error uploading file. Please try again.";
+
+    setUploadStatus({
+      status: "error",
+      message,
+    });
+  }
+  
+   if (fileInputRef.current) {
+    fileInputRef.current.value = "";
+  }
+};
+
+//sample csv file 
   const downloadSampleCSV = () => {
     const sampleData = [
       "question,option_a,option_b,option_c,option_d,correct_answer,difficulty,course_name,course_code,type,tags",
@@ -265,7 +234,58 @@ export function UploadCSV({ onBack }) {
         </Card>
 
         {/* Question Preview Section */}
+
         {uploadedQuestions.length > 0 && (
+          <Card>
+            <CardHeader>
+              <div className="flex justify-between items-center">
+                <div>
+                  <CardTitle>Upload Summary</CardTitle>
+                  <CardDescription>
+                    Overview of the questions successfully imported
+                  </CardDescription>
+                </div>
+                <Badge variant="secondary">{uploadedQuestions.length} Questions</Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="p-4 bg-blue-50 rounded-lg">
+                  <p className="text-sm text-blue-800">Total Questions</p>
+                  <p className="text-2xl font-semibold text-blue-900">{uploadedQuestions.length}</p>
+                </div>
+
+                <div className="p-4 bg-green-50 rounded-lg">
+                  <p className="text-sm text-green-800">Courses</p>
+                  <p className="text-2xl font-semibold text-green-900">
+                    {[...new Set(uploadedQuestions.map(q => q.courseCode))].filter(Boolean).length}
+                  </p>
+                </div>
+
+                <div className="p-4 bg-yellow-50 rounded-lg">
+                  <p className="text-sm text-yellow-800">Difficulty Breakdown</p>
+                  <ul className="text-sm text-yellow-900">
+                    <li>Easy: {uploadedQuestions.filter(q => q.difficulty === "Easy").length}</li>
+                    <li>Medium: {uploadedQuestions.filter(q => q.difficulty === "Medium").length}</li>
+                    <li>Hard: {uploadedQuestions.filter(q => q.difficulty === "Hard").length}</li>
+                  </ul>
+                </div>
+              </div>
+
+              <div className="border-t pt-4 text-sm text-gray-700">
+                <p>
+                  ✅ All questions have been successfully uploaded to your question library.  
+                  You can now view or edit them individually under <strong>Manage Questions</strong>.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      
+
+        {/*question preview for more details*/}
+
+        {/*{uploadedQuestions.length > 0 && (
           <Card>
             <CardHeader>
               <div className="flex justify-between items-center">
@@ -373,8 +393,7 @@ export function UploadCSV({ onBack }) {
                 ))}
               </div>
             </CardContent>
-          </Card>
-        )}
+          </Card> */}
       </div>
     </div>
   );
