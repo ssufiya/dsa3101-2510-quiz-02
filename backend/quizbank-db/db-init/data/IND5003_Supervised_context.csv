@@ -79,8 +79,6 @@ wine2 = pd.concat([wine_red, wine_white], ignore_index=True)
 wine2.columns = col_names
 ```
 
-Question
-========
 The (red and white) wine quality datasets from the unsupervised learning topic 
 have been merged into a single dataframe with 6497 rows. A decision tree 
 classifier has been fit to the dataset as follows:

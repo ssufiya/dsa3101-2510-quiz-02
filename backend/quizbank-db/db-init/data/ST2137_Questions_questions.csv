@@ -18,14 +18,14 @@ In this question, we shall investigate the agreement between G1 and G3 scores. I
 
 4. If we let pij be the proportion in row i and column j, then the strictest version of agreement is η0=∑i=110pii What is the range of values for η0? Which values correspond to higher agreement?
 
-5. A less stringent measure of agreement is given by η1=∑|i−j|≤1pij Compute η1 separately for the five groups defined by Medu and summarise what you observe.",Code,,,,,,,,8,Hard,"Data Manipulation, EDA, Model Validation",
+5. A less stringent measure of agreement is given by η1=∑|i−j|≤1pij Compute η1 separately for the five groups defined by Medu and summarise what you observe.",Code,,,,,,,,8,High,"Data Manipulation, EDA, Model Validation",
 ,2,,"In 1935, Sir R A Fisher described an experiment involving a British woman. The woman claimed that if she was presented with a cup of milk tea, she would be able to distinguish whether milk or tea was added to the cup first. To test, she was given 8 cups of tea, in four of which milk was added first.
 The data collected was as follows:
 
  	  Actual Milk  |  Actual  Tea
 Guessed Milk   	3 | 1
 Guessed Tea  	1 | 3
-Suppose that Fisher’s Exact Test was applied to assess if there was any association between her guesses and the truth. Under the null hypothesis of Fisher’s Exact Test, what is the probability of observing the table above?",MCQ,0.5,0.25,0.5625,0.228,,D,,1,Hard,"Conditional Probability, Hypothesis Testing, Exact Test",
+Suppose that Fisher’s Exact Test was applied to assess if there was any association between her guesses and the truth. Under the null hypothesis of Fisher’s Exact Test, what is the probability of observing the table above?",MCQ,0.5,0.25,0.5625,0.228,,D,,1,High,"Conditional Probability, Hypothesis Testing, Exact Test",
 ,3,,"Consider the following two histograms (created with Python) from the liverpool dataset used in Tutorial 2:
 !(ST2137_Questions_Figure1.png)
 
@@ -39,7 +39,7 @@ liverpool.GF.hist(    1    )",MCQ,freq=False,density=True,"type=""percent""","ty
 
 3. Create a plot of this line, along with the OLS estimate, along with the datapoints.
 
-4. Discuss the benefits of the L1-fit over the OLS fit.",Code,,,,,,,,8,Hard,"Regression, Optimization, Data Manipulation",
+4. Discuss the benefits of the L1-fit over the OLS fit.",Code,,,,,,,,8,High,"Regression, Optimization, Data Manipulation",
 ,5,,"Suppose that the data in liverpool_2223_season.csv has been read into Python as liverpool. The following code tabulates the goal counts for and stores them in a column in goal_counts.
 goal_counts =pd.DataFrame(np.zeros((10, 2), dtype='int'), columns=['GF', 'GA']) 
 tmp2 =liverpool.GF.value_counts() 
@@ -62,7 +62,7 @@ The essential output for this particular contrast can be seen in the following f
 
 Use Python to recreate
 1.	the point estimate of the contrast, and
-2.	the confidence interval for the contrast.",Code,,,,,,,,6,Hard,"Inferential Statistics, ANOVA, Data Manipulation, Linear Modeling",ST2137_Questions_Figure4.png
+2.	the confidence interval for the contrast.",Code,,,,,,,,6,High,"Inferential Statistics, ANOVA, Data Manipulation, Linear Modeling",ST2137_Questions_Figure4.png
 ,9,,"What is the length of the resulting output in this Python code?
 my_list =['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'] 
 result =my_list[2:8:2] 
@@ -77,7 +77,7 @@ Consider the following output. For the raw data, when we construct boxplots for 
 ## plant 
 ## 1 20.0  9.3820  3.997653 4.42 7.4475 8.515  11.045 21.62 
 ## 2 20.0  11.3535 5.126156 2.33 8.4400 11.960 13.845 25.75
-If we had applied a log (base e) transform to time before creating the boxplots, would these two points still be outliers? Explain your answer clearly using the summary statistics above only.",SRQ,,,,,,,,4,Hard,"EDA, Basic Concepts in Statistics, Robustness",
+If we had applied a log (base e) transform to time before creating the boxplots, would these two points still be outliers? Explain your answer clearly using the summary statistics above only.",SRQ,,,,,,,,4,High,"EDA, Basic Concepts in Statistics, Robustness",
 ,14,,"Using the student-mat.csv dataset from our lectures, create a contingency table from the variables address and guardian. Store it as address_guardian.
 Write R code that will:
 1.	Compute the proportion of students whose home address was rural, and whose guardian was their mother.
