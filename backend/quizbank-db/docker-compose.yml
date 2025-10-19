@@ -15,20 +15,5 @@ services:
       - ./db-init:/docker-entrypoint-initdb.d
       - quizbank_data:/var/lib/postgresql/data
 
-  web:                              # ADD THIS WHOLE SECTION
-    build: .
-    container_name: quizbank-api
-    restart: always
-    environment:
-      - FLASK_ENV=development
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/quizbank
-    depends_on:
-      - db
-    ports:
-      - "5002:5000"
-    volumes:
-      - .:/app
-    command: bash -c "python load_sample_data.py && python app.py"
-
 volumes:
   quizbank_data:

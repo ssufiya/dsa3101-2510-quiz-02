@@ -1,0 +1,46 @@
+Context ID,Question Number,Sub-Question Number,Question Text,Question Type,Option A,Option B,Option C,Option D,Option E,Correct Answer,Explanation,Points,Difficulty,Concepts,Attachment
+1,1,1,Calculate and report the conditional probabilities that help to investigate if using PMH increases the chance of getting breast cancer.,Code,,,,,,,,4,Low,"Basic Concepts in Statistics, EDA, Data Manipulation",
+1,1,2,Calculate and report the odds ratio for the table above. Interpret it in the context of this study.,Code,,,,,,,,6,Med,"Basic Concepts in Statistics, EDA	",
+2,2,1,"In order to get the prediction of p of the test points using a tted 10-NN classifier, the R code is of the form
+pred.prob = knn(train, test, cl, k = 10,___)
+where in the blank space, we add",MCQ,type = prob,type = class,prob = TRUE,type = response,type = raw,,,2.5,Low,"Supervised Learning, KNN, Data Manipulation",
+2,2,2,"Using a fitted decision tree, named fit, the prediction of p of the test points is obtained by
+pred.prob = predict(fit, new.data = test, ___)
+where in the blank space, we add",MCQ,type = prob,type = class,prob = TRUE,type = response,type = raw,,,2.5,Low,"Supervised Learning, Decision Trees, Data Manipulation",
+2,2,3,"Using a fitted Naive Bayes classier, named nb, the prediction of pof the test points
+is obtained by
+pred.prob = predict(nb, new.data = test, ___)
+where in the blank space, we add",MCQ,type = prob,type = class,prob = TRUE,type = response,type = raw,,,2.5,Low,"Supervised Learning,Naïve Bayes, Data Manipulation",
+2,2,4,"Using a fitted logistic regression, named lr, the prediction of p of the test points is
+obtained by
+pred.prob = predict(lr, new.data = test, ___)
+where in the blank space, we add",MCQ,type = prob,type = class,prob = TRUE,type = response,type = raw,,,2.5,Low,"Supervised Learning , Logistic Regression, Data Manipulation",
+3,3,1,Type the equation of model M into the R code file as comments. Explain in detail if any notation is used in the equation.,Code,,,,,,,,2,Med,"Linear Modeling, Basic Concepts in Statistics",
+3,3,2,Report the coeffecient of variable color in model M and interpret it.,Code,,,,,,,,2,Med,"Linear Modeling, Basic Concepts in Statistics",
+3,3,3,Report the coecient of variable weight in model M and interpret it. Is it signicant in model M? Explain.,Code,,,,,,,,2,Med,"Linear Modeling, Basic Concepts in Statistics, Model Validation",
+3,3,4,"Calculate and report the odds ratio of having satellites between two crabs below:
+Crab A: weight = 3 kg, color = light;
+Crab B: weight = 2 kg, color = dark.",Code,,,,,,,,4,High,"Supervised Learning, Logistic Regression, Basic Concepts in Statistics",
+4,4,1,"Write code to create a new column for df named status, where status equal to 1 if quality of car evaluation is high, and status equal to 0 otherwise.",Code,,,,,,,,2,Low,Data Manipulation ,
+4,4,2,"Let m denote a vector of possible values for argument minsplit which is from 25 up to 50. Write code to fit a decision tree (using Information Gain) that helps to predict status of car evaluation using the dataset given for each value of minsplit in m.
+For each tree fitted, write code to obtain the values of TPR and FNR.",Code,,,,,,,,6,High,"Supervised Learning, Decision Trees, Model Validation, Data Manipulation",
+4,4,3,Which is the best value of minsplit such that the value of TPR of the tree built from that minsplit is at least 0.9. Write code to show how to determine the best value of minsplit.,Code,,,,,,,,4,Med,"Supervised Learning, Decision Trees, Model Validation, Data Manipulation",
+4,4,4,"With the value of minsplit chosen in Question 3, write code to fit a decision tree, to be named as DT. Report the name of the most important variable in that tree.",Code,,,,,,,,3,Low,"Supervised Learning, Decision Trees",
+4,4,5,Write code to plot the ROC curve of the tree DT. Derive and report the value of AUC.,Code,,,,,,,,5,Med,"Model Validation, Data Manipulation",
+4,4,6,"We now use the naive Bayes classifier for the dataset given. Let status be the response variable. Write code to form the classifier, to be named as NB.",Code,,,,,,,,2,Low,"Supervised Learning, Naïve Bayes, Data Manipulation ",
+4,4,7,Write code to calculate the precision of NB for the given dataset using a threshold δ= 0.1.,Code,,,,,,,,4,Med,"Model Validation, Data Manipulation",
+4,4,8,Write code to plot the ROC curve of the classier NB. Derive and report the value of AUC.,Code,,,,,,,,4,Med,"Model Validation, Data Manipulation",
+4,4,9,"Since all the input features are ordered, we can fit a logistic regression for status, by considering each feature as a quantitative variable.
+Write code to transform buying to numeric with values 1, 2, 3, and 4 for the categories low, med, high, and vhigh, respectively.",Code,,,,,,,,3,Low,Data Manipulation,
+4,4,10,"Using status as the response variable, write code to form a logistic regression model for it (called LR), using the six input features given.",Code,,,,,,,,3,Low,"Supervised Learning, Logistic Regression, Data Manipulation",
+4,4,11,"Under model LR, compare the odds of having status being 1 (high quality) between a car that has big luggage boot and that of a car having small luggage boot, given that they both have the same information for other features.",Code,,,,,,,,4,Med,"Supervised Learning, Logistic Regression, Basic Concepts in Statistics",
+4,4,12,Write code to calculate the precision of model LR for the given dataset using a threshold δ= 0.1.,Code,,,,,,,,5,Med,"Model Validation, Data Manipulation",
+4,4,13,Write code to plot the ROC curve of model LR. Derive and report the value of AUC.,Code,,,,,,,,5,Med,"Model Validation, Data Manipulation",
+4,4,14,"Since all the input features are ordered, we can fit a KNN classier for status, by considering each feature as a quantitative variable.
+Write code to standardize the six input features, and store them in a data frame named data.x.",Code,,,,,,,,3,Med,"Data Manipulation, Supervised Learning, KNN",
+4,4,15,Consider KNN classiers with k being the odd numbers from 3 up to 43. Write code to form those classiers and store the values of TPR and FNR for each value of k.,Code,,,,,,,,4,High,"Supervised Learning, KNN, Model Validation, Data Manipulation ",
+4,4,16,Report the value of k that its TPR is at least 0.9 and its FNR is non-zero.,Code,,,,,,,,2,Low,"Supervised Learning, KNN, Model Validation",
+4,4,17,"With the value of k determined in Question 16, write code to form a KNN classier and find its precision using a threshold δ= 0.1.",Code,,,,,,,,3,Med,"Model Validation, Data Manipulation",
+4,4,18,Write code to plot the ROC curve of the KNN classier in Question 17. Derive and report the value of AUC.,Code,,,,,,,,3,Med,"Model Validation, Data Manipulation",
+4,4,19,"Write code to create a plot that has all the four ROC curves created in Questions 5, 8, 13, 18 where each curve should have a different color and a legend box is included in the plot.",Code,,,,,,,,3,Med,"Model Validation, Data Manipulation",
+4,4,20,"Among all the four ROC curves, which curve has highest AUC value?",Code,,,,,,,,2,Low,Model Validation,
