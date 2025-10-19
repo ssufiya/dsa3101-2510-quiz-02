@@ -3,32 +3,22 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../co
 import { Button } from "../components/button";
 import { Badge } from "../components/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/tabs";
-import {
-  ArrowLeft,
-  Clock,
-  BarChart3,
-  Calendar,
-  Edit3,
-  Download,
-  Eye,
-  HelpCircle,
-  Lightbulb,
-  ExternalLink
-} from "lucide-react";
+import { ArrowLeft, Clock, BarChart3, Calendar, Edit3, Download, Eye, HelpCircle, Lightbulb, ExternalLink } from "lucide-react";
 
-export function QuestionDetails({ questionId, onBack, onViewQuestion }) {
+export function QuestionDetails({ questionId, onBack, onQuestionDetails }) {
   // Default to a mock question if no questionId is provided
-  const [questionData] = useState({
-    id: "q-1",
-    question:
-      "What is the time complexity of inserting an element at the beginning of a linked list?",
+  
+  const questionDataset = [
+  {
+    id: 1,
+    question: "What is the time complexity of inserting an element at the beginning of a linked list?",
     type: "Multiple Choice",
     options: ["O(1)", "O(n)", "O(log n)", "O(n²)"],
     correctAnswer: "O(1)",
     explanation:
       "Inserting at the beginning of a linked list only requires updating the head pointer and setting the new node's next pointer, which takes constant time.",
     courseName: "Data Structures and Algorithms",
-    courseCode: "CS 201",
+    courseCode: "CS201",
     difficulty: "Medium",
     author: "Dr. Sarah Chen",
     institution: "Stanford University",
@@ -40,7 +30,31 @@ export function QuestionDetails({ questionId, onBack, onViewQuestion }) {
     uniqueInstructors: 8,
     averageScore: 72.5,
     lastUsed: "2024-01-15",
-  });
+  },
+  {
+    id: 2,
+    question: "State and prove the Rank-Nullity Theorem.",
+    type: "Essay",
+    options: [],
+    correctAnswer: "",
+    explanation: "The Rank-Nullity theorem states that rank(A) + nullity(A) = n for an n×m matrix A.",
+    courseName: "Linear Algebra I",
+    courseCode: "MA1101R",
+    difficulty: "Hard",
+    author: "Prof. Lim",
+    institution: "NUS",
+    createdAt: "2023-10-10",
+    lastModified: "2023-10-20",
+    tags: ["theorem", "proof", "linear algebra"],
+    subject: "Mathematics",
+    totalUsages: 100,
+    uniqueInstructors: 4,
+    averageScore: 60.0,
+    lastUsed: "2024-03-22",
+  },
+];
+
+const questionData = questionDataset.find((q) => q.id === questionId) ?? questionDataset[0];
 
   const [usageHistory] = useState([
     {

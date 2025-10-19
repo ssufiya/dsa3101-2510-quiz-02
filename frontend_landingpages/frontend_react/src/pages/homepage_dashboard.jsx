@@ -7,10 +7,10 @@ import { Alert, AlertDescription } from '../components/alert';
 import { 
   Plus, BookOpen, Edit, Trash2, Eye, LogOut, Users, 
   BarChart3, HelpCircle, Upload, FileText, CheckCircle, 
-  AlertCircle, Download 
+  AlertCircle, Download, ShoppingBasket
 } from 'lucide-react';
 
-export function Homepage({ onLogout, onCreateQuiz, onEditQuiz, onViewQuiz, onGoToQuestionLibrary, onGoToUpload }) {
+export function Homepage({ onLogout, onCreateQuiz, onEditQuiz, onViewQuiz, onGoToQuestionLibrary, onGoToUpload, onGoToQuestionCart }) {
   // Sample quiz data - empty initially
   const [quizzes] = useState([]);
 
@@ -39,6 +39,10 @@ export function Homepage({ onLogout, onCreateQuiz, onEditQuiz, onViewQuiz, onGoT
                 <LogOut className="h-4 w-4" />
                 <span>Logout</span>
               </Button>
+              <Button variant="ghost" onClick={onGoToQuestionCart} className="flex items-center space-x-2">
+                <ShoppingBasket className="h-4 w-4" />
+                <span>Cart</span>
+              </Button>
             </div>
           </div>
         </div>
@@ -46,7 +50,7 @@ export function Homepage({ onLogout, onCreateQuiz, onEditQuiz, onViewQuiz, onGoT
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        {/*<div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm">Total Quizzes</CardTitle>
@@ -79,7 +83,7 @@ export function Homepage({ onLogout, onCreateQuiz, onEditQuiz, onViewQuiz, onGoT
               <p className="text-xs text-muted-foreground">This month</p>
             </CardContent>
           </Card>
-        </div>
+        </div>*/}
 
         {/* Quiz Upload */}
         <div className="flex justify-between items-center mb-6">
@@ -91,11 +95,11 @@ export function Homepage({ onLogout, onCreateQuiz, onEditQuiz, onViewQuiz, onGoT
             <Plus className="h-4 w-4" />
             <span>Click Here!</span>
           </Button>
-
         </div>
+      
 
         {/* Quiz Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {/*<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {quizzes.map((quiz) => (
             <Card key={quiz.id} className="hover:shadow-lg transition-shadow">
               <CardHeader>
@@ -169,7 +173,7 @@ export function Homepage({ onLogout, onCreateQuiz, onEditQuiz, onViewQuiz, onGoT
               </Button>
             </CardContent>
           </Card>
-        )}
+        )} */}
       </div>
     </div>
   );
