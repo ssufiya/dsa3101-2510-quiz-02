@@ -23,7 +23,7 @@ echo ""
 
 # Test 2: Check API root endpoint
 echo -e "${YELLOW}Test 2: Testing API root endpoint...${NC}"
-RESPONSE=$(curl -s http://localhost:5000/)
+RESPONSE=$(curl -s http://localhost:5003/)
 if echo "$RESPONSE" | grep -q "Quiz Bank API"; then
     echo -e "${GREEN}✓ API is accessible${NC}"
     echo "Response: $RESPONSE"
@@ -35,9 +35,9 @@ echo ""
 
 # Test 3: Check Swagger docs
 echo -e "${YELLOW}Test 3: Checking Swagger UI...${NC}"
-SWAGGER=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5000/docs)
+SWAGGER=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5003/docs)
 if [ "$SWAGGER" = "200" ]; then
-    echo -e "${GREEN}✓ Swagger UI is accessible at http://localhost:5000/docs${NC}"
+    echo -e "${GREEN}✓ Swagger UI is accessible at http://localhost:5003/docs${NC}"
 else
     echo -e "${RED}✗ Swagger UI is not accessible (HTTP $SWAGGER)${NC}"
 fi
@@ -45,7 +45,7 @@ echo ""
 
 # Test 4: Test GET /api/questions
 echo -e "${YELLOW}Test 4: Testing GET /api/questions...${NC}"
-QUESTIONS=$(curl -s http://localhost:5000/api/questions)
+QUESTIONS=$(curl -s http://localhost:5003/api/questions)
 if echo "$QUESTIONS" | grep -q "success"; then
     echo -e "${GREEN}✓ GET /api/questions works${NC}"
     echo "Response: $QUESTIONS" | head -c 200
@@ -85,7 +85,7 @@ echo -e "${GREEN}Testing Complete!${NC}"
 echo "=========================================="
 echo ""
 echo "Next steps:"
-echo "1. Open Swagger UI: http://localhost:5000/docs"
+echo "1. Open Swagger UI: http://localhost:5003/docs"
 echo "2. Test API endpoints interactively"
 echo "3. Upload a test CSV file"
 echo ""
