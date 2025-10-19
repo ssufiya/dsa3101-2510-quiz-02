@@ -47,7 +47,7 @@ async def get_questions(
                 q.concepts, 
                 q.created_at, 
                 q.version_number,
-                q.original_id,
+                q.previous_version_id,
                 q.is_latest
             FROM questions q
             LEFT JOIN courses c ON q.course_id = c.course_id
@@ -97,7 +97,7 @@ async def get_questions(
                 "concepts": row.concepts.split(',') if row.concepts else [],
                 "created_at": row.created_at.isoformat() if row.created_at else None,
                 "version_number": row.version_number,
-                "original_id": row.original_id,
+                "previous_version_id": row.previous_version_id,
                 "is_latest": row.is_latest
             })
 
@@ -167,7 +167,7 @@ async def get_question_by_id(id: int, db: Session = Depends(get_db)):
             "assessment_type": row.assessment_type,
             "created_at": row.created_at.isoformat() if row.created_at else None,
             "version_number": row.version_number,
-            "original_id": row.original_id,
+            "previous_version_id": row.previous_version_id,
             "is_latest": row.is_latest
         }
 
@@ -234,21 +234,21 @@ async def get_question_versions(id: int, db: Session = Depends(get_db)):
     GET /api/question/{id}/versions
     
     Retrieve all versions of the selected question.
-    Example: For qns_id = 1, fetch all questions with original_id = 1
+    Example: For qns_id = 1, fetch all questions with previous_version_id = 1
     
     Returns:
     - content (same detail level as API 1)
-    - original_id
+    - previous_version_id
     - version_number
     - is_latest
     
     Used in: QuestionDetails
     """
     # TODO: Implement version fetching
-    # Query: SELECT * FROM questions WHERE original_id = :id OR question_id = :id
+    # Query: SELECT * FROM questions WHERE previous_version_id = :id OR question_id = :id
     try:
         check_query = text("""
-            SELECT question_type, original_id, question_id
+            SELECT question_type, previous_version_id, question_id
             FROM questions
             WHERE question_id = :id
         """)
@@ -259,7 +259,7 @@ async def get_question_versions(id: int, db: Session = Depends(get_db)):
         if not row: 
             raise HTTPException(status_code=404, detail="question not found")
         
-        original_id = row.original_id if row.original_id else row.question_id
+        previous_version_id = row.previous_version_id if row.previous_version_id else row.question_id
 
         versions_query = text("""
             SELECT
@@ -273,16 +273,16 @@ async def get_question_versions(id: int, db: Session = Depends(get_db)):
                 q.concepts,
                 q.created_at,
                 q.version_number,
-                q.original_id,
+                q.previous_version_id,
                 q.is_latest)
             FROM questions q
             LEFT JOIN courses c ON q.course_id = c.course_id
             LEFT JOIN assessments a on q.assessment_id = a.assessment_id
-            WHERE q.original_id = :original_id OR (q.question_id = original_id AND q.original_id is NULL)
+            WHERE q.previous_version_id = :previous_version_id OR (q.question_id = previous_version_id AND q.previous_version_id is NULL)
             ORDER BY q.version_number ASC
         """)
 
-        result = db.execute(versions_query, {"original_id": original_id})
+        result = db.execute(versions_query, {"previous_version_id": previous_version_id})
         rows = result.fetchall()
 
         versions = []
@@ -297,13 +297,13 @@ async def get_question_versions(id: int, db: Session = Depends(get_db)):
                 "concepts": row.concepts.split(',') if row.concepts else [],
                 "created_at": row.created_at.isoformat() if row.created_at else None,
                 "version_number": row.version_number,
-                "original_id": row.original_id,
+                "previous_version_id": row.previous_version_id,
                 "is_latest": row.is_latest
             })
 
         return {
             "success": True,
-            "original_id": original_id,
+            "previous_version_id": previous_version_id,
             "count": len(versions),
             "data": versions
         }
@@ -328,7 +328,7 @@ async def upload_new_version(
     This API should:
     - Increment version_number by 1 (using latest version_number where is_latest = TRUE)
     - Assign a new question_id
-    - Ensure correct original_id
+    - Ensure correct previouse_version_id
     - Change is_latest boolean
     
     A new row is created for every version, past versions are preserved.
@@ -348,7 +348,7 @@ async def upload_new_version(
             raise HTTPException(status_code=400, detail={"errors": validation_errors})
         
         current_query = text("""
-            SELECT original_id, version_number, is_latest, course_id, assessment_id
+            SELECT previouse_version_id, version_number, is_latest, course_id, assessment_id
             FROM questions
             WHERE question_id = "id
         """)
@@ -377,21 +377,20 @@ async def upload_new_version(
         assessment_row = assessment_result.fetchone()
         assessment_id = assessment_row.assessment_id if assessment_row else current.assessment_id
         
-        original_id = current.original_id if current.original_id else id
+        previouse_version_id = current.previouse_version_id if current.previouse_version_id else id
         new_version_number = current.version_number + 1
 
         update_query = text("""
-            UPDATE questions
-            SET is_latest = FALSE
-            WHERE question_id = :id
+            INSERT INTO questions (..., previous_version_id) 
+            VALUES (..., :old_question_id)
         """)
         db.execute(update_query, {"id": id})
 
         insert_fields = [
-            "question_text", "question_type", "difficulty", "concepts", "course_id", "assessment_id", "version_number", "original_id", "is_latest"
+            "question_text", "question_type", "difficulty", "concepts", "course_id", "assessment_id", "version_number", "previous_version_id", "is_latest"
         ]
         insert_values = [
-            ":question_text", ":question_type", ":difficulty", ":concepts", ":course_id", ":assessment_id", ":version_number", ":original_id", "TRUE"
+            ":question_text", ":question_type", ":difficulty", ":concepts", ":course_id", ":assessment_id", ":version_number", ":previous_version_id", "TRUE"
         ]
 
         params = {
@@ -402,7 +401,7 @@ async def upload_new_version(
             "course_id": course_id,
             "assessment_id": assessment_id,
             "version_number": new_version_number,
-            "original_id": original_id
+            "previous_version_id": previous_version_id
         }
 
         if question_data.get("correct_answer"):
@@ -451,7 +450,7 @@ async def upload_new_version(
             "message": "New version created successfully",
             "new_question_id": new_id,
             "version_number": new_version_number,
-            "original_id": original_id
+            "previous_version_id": previous_version_id
         }
 
     except HTTPException:
@@ -473,12 +472,12 @@ async def upload_new_questions(
     POST /api/questions/upload
     
     Add new questions into database.
-    Should tag: version_number = 1, original_id = NULL, is_latest = TRUE
+    Should tag: version_number = 1, previous_version_id = NULL, is_latest = TRUE
     
     Used in: QuestionUpload
     """
     # TODO: Implement new question upload
-    # Set version_number = 1, original_id = NULL, is_latest = TRUE
+    # Set version_number = 1, previous_version_id = NULL, is_latest = TRUE
     try:
         if not file.filename.endswith('.csv'):
             raise HTTPException(status_code=400, detail="Only CSV files are allowed")
@@ -505,7 +504,7 @@ async def upload_new_questions(
                 insert_fields = [
                     "question_text", "question_type", "difficulty",
                     "concepts", "course_id", "assessment_id",
-                    "version_number", "original_id", "is_latest", "user_id"
+                    "version_number", "previous_version_id", "is_latest", "user_id"
                 ]
                 insert_values = [
                     ":question_text"," :question_type", ":difficulty",
