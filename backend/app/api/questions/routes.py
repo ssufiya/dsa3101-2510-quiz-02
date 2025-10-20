@@ -117,7 +117,7 @@ async def get_questions(
         
 
         questions = []
-        for row in rows:
+        for row in filtered_rows:
             questions.append({
                 "question_id": row.question_id,
                 "question_text": row.question_text,
@@ -148,18 +148,8 @@ async def get_questions(
 async def get_question_by_id(id: int, db: Session = Depends(get_db)):
     """
     GET /api/questions/:id
-    
-    Returns full question content:
-    - context
-    - question
-    - answer options
-    - correct answer
-    - uploaded files/images
-    - all corresponding tags
-    
-    Used in: QuestionDetails, QuestionEdit
+    Returns full question content
     """
-    # Query the database for the question
     try: 
         query = text("""
             SELECT 
@@ -168,20 +158,19 @@ async def get_question_by_id(id: int, db: Session = Depends(get_db)):
                 c.course_name,
                 a.assessment_type,
                 ctx.context_text,
-                att.attachment_name
+                STRING_AGG(att.attachment_name, ', ') as attachment_names
             FROM questions q
             LEFT JOIN courses c ON q.course_id = c.course_id
             LEFT JOIN assessments a ON q.assessment_id = a.assessment_id
             LEFT JOIN contexts ctx ON q.context_id = ctx.context_id
-            LEFT JOIN attachments att ON q.attachment_id = att.attachment_id
+            LEFT JOIN attachments att ON q.question_id = att.question_id
             WHERE q.question_id = :id
+            GROUP BY q.question_id, c.course_code, c.course_name, a.assessment_type, ctx.context_text
         """)
     
-        # Execute the query
         result = db.execute(query, {"id": id})
         row = result.fetchone()
         
-        # Check if question exists
         if not row:
             raise HTTPException(status_code=404, detail="Question not found")
         
@@ -198,33 +187,30 @@ async def get_question_by_id(id: int, db: Session = Depends(get_db)):
             "assessment_type": row.assessment_type,
             "created_at": row.created_at.isoformat() if row.created_at else None,
             "version_number": row.version_number,
-            "previous_version_id": row.previous_version_id,
-            "is_latest": row.is_latest
+            "previous_version_id": row.previous_version_id
         }
-
-        if hasattr(row, 'correct_answer') and row.correct_answer:
-            response_data["correct_answer"] = row.correct_answer
         
         # Add MCQ options if applicable
         if row.question_type == "MCQ":
             options = {}
-            if hasattr(row, 'option_a') and row.option_a:
+            if row.option_a:
                 options["A"] = row.option_a
-            if hasattr(row, 'option_b') and row.option_b:
+            if row.option_b:
                 options["B"] = row.option_b
-            if hasattr(row, 'option_c') and row.option_c:
+            if row.option_c:
                 options["C"] = row.option_c
-            if hasattr(row, 'option_d') and row.option_d:
+            if row.option_d:
                 options["D"] = row.option_d
-            if hasattr(row, 'option_e') and row.option_e:
+            if row.option_e:
                 options["E"] = row.option_e
             if options:
                 response_data["options"] = options
 
         elif row.question_type == "True/False":
             response_data["options"] = {
-            "True": "True",
-            "False": "False"}
+                "True": "True",
+                "False": "False"
+            }
         
         # Add context if exists
         if row.context_text:
@@ -232,12 +218,16 @@ async def get_question_by_id(id: int, db: Session = Depends(get_db)):
                 "context_text": row.context_text
             }
         
-        # Add attachment if exists
-        if row.attachment_name:
-            response_data["uploaded_files"] = {
-                "attachment_name": row.attachment_name,
-                "attachment_url": f"/api/attachments/{row.attachment_name}"
-            }
+        # Add attachments if exist
+        if row.attachment_names:
+            attachments = row.attachment_names.split(', ')
+            response_data["uploaded_files"] = [
+                {
+                    "attachment_name": name,
+                    "attachment_url": f"/api/attachments/{name}"
+                }
+                for name in attachments
+            ]
         
         # Add tags
         response_data["tags"] = {
@@ -256,7 +246,6 @@ async def get_question_by_id(id: int, db: Session = Depends(get_db)):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
-
 
 # API #3: Fetching ALL Versions
 @router.get("/{id}/versions")
@@ -647,7 +636,7 @@ async def upload_new_questions(
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
 # API #6: Version Diff
-@router.get("/questions/{id}/diff/{version_id}")
+@router.get("/{id}/diff/{version_id}")
 async def get_question_diff(id: int, version_id: int, db: Session = Depends(get_db)):
     """
     Compare two versions of a question (like Git diff).
@@ -697,7 +686,7 @@ async def get_question_diff(id: int, version_id: int, db: Session = Depends(get_
 
 
 # API #7: Suggest Question Variants by semantic similarity
-@router.get("/questions/{id}/suggestions")
+@router.get("/{id}/suggestions")
 async def get_question_suggestions(id: int, db: Session = Depends(get_db), top_n: int = 5):
     """
     Suggest variant questions based on semantic similarity (TF-IDF).

@@ -1,24 +1,30 @@
 #!/bin/bash
 set -e
 
-echo "=================================="
-echo "Starting Backend Container"
-echo "=================================="
+echo "🔄 Waiting for database..."
 
-# Wait for database to be ready
-echo "Waiting for database..."
-until PGPASSWORD=$DB_PASSWORD psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -c '\q' 2>/dev/null; do
-  echo "  Database is unavailable - sleeping"
+# Wait for database with timeout
+MAX_RETRIES=30
+RETRY_COUNT=0
+
+until pg_isready -h db -p 5432 -U postgres 2>/dev/null || [ $RETRY_COUNT -eq $MAX_RETRIES ]; do
+  RETRY_COUNT=$((RETRY_COUNT+1))
+  echo "⏳ Database is unavailable - attempt $RETRY_COUNT/$MAX_RETRIES"
   sleep 2
 done
-echo "✓ Database is ready"
 
-# Run database initialization
-echo ""
-echo "Running database initialization..."
-python scripts/init_db.py
+if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
+  echo "❌ Could not connect to database after $MAX_RETRIES attempts"
+  echo "⚠️  Starting API anyway (database might come up later)..."
+else
+  echo "✅ Database is ready!"
+fi
 
-# Start the application
-echo ""
-echo "Starting FastAPI application..."
+# Run init script if it exists
+if [ -f "scripts/init_db.py" ]; then
+    echo "🔧 Running database initialization..."
+    python scripts/init_db.py || echo "⚠️  Init script failed, continuing..."
+fi
+
+echo "🚀 Starting FastAPI application..."
 exec "$@"

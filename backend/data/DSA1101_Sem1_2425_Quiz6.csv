@@ -1,0 +1,6 @@
+Context ID,Context Text,Attachment
+1,"Data files <bank-sample.csv> and <bank-sample-test.csv> are provided on Canvas. 
+Please open the R code file attached <Quiz6.R> and run the code to answer the questions below. 
+Note: to run the code file smoothly, you might need to:
+Set working directory: setwd()
+Install packages: install.packages(“e1071”)",DSA1101_Sem1_2425_Quiz6.R

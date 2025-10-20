@@ -95,6 +95,8 @@ CREATE TABLE questions (
     created_by INTEGER REFERENCES users(user_id) ON DELETE SET NULL,
     version_number INTEGER DEFAULT 1,
     previous_version_id INTEGER REFERENCES questions(question_id) DEFERRABLE INITIALLY DEFERRED,
+    original_id INTEGER REFERENCES questions(question_id) ON DELETE SET NULL,
+    is_latest BOOLEAN DEFAULT TRUE,
 
     CONSTRAINT uq_questions_dedupe UNIQUE (course_id, assessment_id, question_text)
 );
