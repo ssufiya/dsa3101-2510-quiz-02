@@ -15,6 +15,7 @@ DATABASE_URL = os.getenv(
 # Create engine
 engine = create_engine(DATABASE_URL, echo=True)
 
+
 # Session factory
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
@@ -29,3 +30,5 @@ def get_db():
         yield db
     finally:
         db.close()
+
+

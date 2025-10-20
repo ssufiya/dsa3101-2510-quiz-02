@@ -13,6 +13,9 @@ import numpy as np
 from app.db import get_db
 from app.utils.file_parser import parse_csv, parse_csv_for_version
 from app.utils.validation import validate_question_data
+from pathlib import Path
+import shutil
+import subprocess
 
 router = APIRouter()
 
@@ -495,145 +498,56 @@ async def upload_new_version(
 
 
 # API #5: Uploading a NEW Quiz/Question
+# API #5: Uploading a NEW Quiz/Question
 @router.post("/upload")
-async def upload_new_questions(
-    file: UploadFile = File(...),
-    user_id: int = 1,
-    db: Session = Depends(get_db)
-):
+async def upload_new_questions(file: UploadFile = File(...)):
     """
-    POST /api/questions/upload
-    
-    Add new questions into database.
-    Should tag: version_number = 1, previous_version_id = NULL, is_latest = TRUE
-    
-    Used in: QuestionUpload
+    Upload CSV to db-init/data and rebuild the database automatically.
     """
-    # TODO: Implement new question upload
-    # Set version_number = 1, previous_version_id = NULL, is_latest = TRUE
+    ROOT_DIR = Path(__file__).resolve().parent.parent.parent.parent  # backend/
+    DATA_DIR = ROOT_DIR / "quizbank-db" / "db-init" / "data"
+    INIT_SCRIPT = ROOT_DIR / "scripts" / "init_db.py"
+
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+    if not file.filename.endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Only CSV files are allowed")
+
+    save_path = DATA_DIR / file.filename
+
+    if save_path.exists():
+        raise HTTPException(status_code=400, detail=f"File {file.filename} already exists")
+
     try:
-        if not file.filename.endswith('.csv'):
-            raise HTTPException(status_code=400, detail="Only CSV files are allowed")
-        
-        contents = await file.read()
-        questions_data = parse_csv(contents)
-
-        if not questions_data:
-            raise HTTPException(status_code=400, detail="No valid questions found in CSV")
-        
-        inserted_ids = []
-        errors = []
-
-        for idx, question in enumerate(questions_data):
-            try: 
-                validation_errors = validate_question_data(question)
-                if validation_errors:
-                    errors.append({
-                        "row": idx + 1,
-                        "errors": validation_errors
-                    })
-                    continue
-
-                insert_fields = [
-                    "question_text", "question_type", "difficulty",
-                    "concepts", "course_id", "assessment_id",
-                    "version_number", "previous_version_id", "is_latest", "user_id"
-                ]
-                insert_values = [
-                    ":question_text"," :question_type", ":difficulty",
-                    ":concepts", ":course_id", ":assessment_id",
-                    "1", "NULL", "TRUE", ":user_id"
-                ]
-                params = {
-                    "question_text": question.get("question_text"),
-                    "question_type": question.get("question_type"),
-                    "difficulty": question.get("difficulty"),
-                    "concepts": question.get("concepts"),
-                    "course_id": question.get("course_id"),
-                    "assessment_id": question.get("assessment_id"),
-                    "user_id": user_id
-                }
-
-                result = db.execute(insert_query, {
-                    "question_text": question.get("question"),
-                    "question_type": question.get("question_type", "MCQ"),
-                    "difficulty": question.get("difficulty"),
-                    "option_a": question.get("option_a"),
-                    "option_b": question.get("option_b"),
-                    "option_c": question.get("option_c"),
-                    "option_d": question.get("option_d"),
-                    "option_e": question.get("option_e"),
-                    "concepts": question.get("concepts"),
-                    "course_id": question.get("course_id, 1"), # need to add lookup logic
-                    "assessment_id": question.get("assessment_id", 1),
-                    "user_id": user_id
-                })
-
-
-                if question.get("correct_answer"):
-                    insert_fields.append("correct_answer")
-                    insert_values.append(":correct_answer")
-                    params["correct_answer"] = question.get("correct_answer")
-
-                if question.get("option_a"):
-                    insert_fields.append("option_a")
-                    insert_values.append(":option_a")
-                    params["option_a"] = question.get("option_a")
-
-                if question.get("option_b"):
-                    insert_fields.append("option_b")
-                    insert_values.append(":option_b")
-                    params["option_b"] = question.get("option_b")
-
-                if question.get("option_c"):
-                    insert_fields.append("option_c")
-                    insert_values.append(":option_c")
-                    params["option_c"] = question.get("option_c")
-
-                if question.get("option_d"):
-                    insert_fields.append("option_d")
-                    insert_values.append(":option_d")
-                    params["option_d"] = question.get("option_d")
-
-                if question.get("option_e"):
-                    insert_fields.append("option_e")
-                    insert_values.append(":option_e")
-                    params["option_e"] = question.get("option_e")
-
-                insert_query = text(f"""
-                    INSERT INTO questions ({', '.join(insert_fields)})
-                    VALUES ({', '.join(insert_values)})
-                    RETURNING question_id
-                """)
-
-                result = db.execute(insert_query, params)
-                new_id = result.fetchone()[0]
-                inserted_ids.append(new_id)
-
-            except Exception as e:
-                errors.append({
-                    "row": idx + 1,
-                    "error": str(e)
-                })
-            
-        if inserted_ids:
-            db.commit()
-        else: 
-            db.rollback()
-
-        return {
-            "success": len(inserted_ids) > 0,
-            "message": f"Successfully uploaded {len(inserted_ids)} questions",
-            "inserted_count": len(inserted_ids),
-            "inserted_ids": inserted_ids,
-            "errors": errors if errors else None
-        }
-    except HTTPException:
-        db.rollback()
-        raise
+        with save_path.open("wb") as f:
+            shutil.copyfileobj(file.file, f)
     except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to save CSV: {str(e)}")
+
+    if not INIT_SCRIPT.exists():
+        raise HTTPException(status_code=500, detail=f"DB init script not found: {INIT_SCRIPT}")
+
+    try:
+        result = subprocess.run(
+            ["python3", str(INIT_SCRIPT.resolve())],
+            cwd=str(INIT_SCRIPT.parent),
+            capture_output=True,
+            text=True,
+            check=True
+        )
+    except subprocess.CalledProcessError as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"DB rebuild failed:\n{e.stderr or e.stdout}"
+        )
+
+    return {
+        "success": True,
+        "message": f"CSV uploaded successfully and database rebuilt using {file.filename}.",
+        "file_path": str(save_path),
+        "db_rebuild_log": result.stdout
+    }
+
 
 # API #6: Version Diff
 @router.get("/{id}/diff/{version_id}")
