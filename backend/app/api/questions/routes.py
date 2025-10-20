@@ -504,7 +504,10 @@ async def upload_new_questions(
     user_id: int = 1,
     db: Session = Depends(get_db)
 ):
-    """Upload CSV and immediately insert questions into database"""
+    """
+    Upload CSV and immediately insert questions into database.
+    Returns all uploaded questions for review.
+    """
     import pandas as pd
     import io
     
@@ -526,7 +529,7 @@ async def upload_new_questions(
         if df.empty:
             raise HTTPException(status_code=400, detail="No valid questions found in CSV")
         
-        # Map your column names to database column names
+        # Map column names
         column_mapping = {
             'Question Text': 'question_text',
             'Question Type': 'question_type',
@@ -546,14 +549,12 @@ async def upload_new_questions(
             'Attachment': 'attachment'
         }
         
-        # Rename columns
         df = df.rename(columns=column_mapping)
         
-        inserted_ids = []
+        inserted_questions = []  # ← Store full question details
         errors = []
 
         # Extract course info from filename
-        # e.g., "DSA1101_Test3_questions.csv" → "DSA1101"
         filename_parts = file.filename.replace('.csv', '').split('_')
         default_course_code = filename_parts[0] if filename_parts else 'UNKNOWN'
         default_assessment_type = filename_parts[1] if len(filename_parts) > 1 else 'Quiz'
@@ -567,7 +568,7 @@ async def upload_new_questions(
                     print(f"   ⏭️  Skipping row {idx + 2}: Empty question text")
                     continue
                 
-                # Get course_code (from filename or row data)
+                # Get course_code
                 course_code = str(row.get('course_code', default_course_code))
                 
                 # Check if course exists
@@ -668,7 +669,7 @@ async def upload_new_questions(
                 for csv_col, db_col in optional_fields.items():
                     if csv_col in df.columns and pd.notna(row.get(csv_col)):
                         value = str(row.get(csv_col)).strip()
-                        if value:  # Only add if not empty
+                        if value:
                             insert_fields.append(db_col)
                             insert_values.append(f":{db_col}")
                             params[db_col] = value
@@ -682,7 +683,43 @@ async def upload_new_questions(
                 
                 result = db.execute(insert_query, params)
                 new_id = result.fetchone()[0]
-                inserted_ids.append(new_id)
+                
+                # Build complete question object for response
+                question_obj = {
+                    "question_id": new_id,
+                    "question_number": params.get('question_number'),
+                    "sub_question_number": params.get('sub_question_number'),
+                    "question_text": params['question_text'],
+                    "question_type": params['question_type'],
+                    "difficulty": params.get('difficulty'),
+                    "concepts": params.get('concepts', '').split(',') if params.get('concepts') else [],
+                    "correct_answer": params.get('correct_answer'),
+                    "explanation": params.get('explanation'),
+                    "points": params.get('points'),
+                    "course_code": course_code,
+                    "assessment_type": assessment_type,
+                    "assessment_year": assessment_year,
+                    "version_number": 1,
+                    "is_latest": True
+                }
+                
+                # Add options if MCQ
+                if params['question_type'] in ['MCQ', 'Multiple Choice']:
+                    options = {}
+                    if params.get('option_a'):
+                        options['A'] = params['option_a']
+                    if params.get('option_b'):
+                        options['B'] = params['option_b']
+                    if params.get('option_c'):
+                        options['C'] = params['option_c']
+                    if params.get('option_d'):
+                        options['D'] = params['option_d']
+                    if params.get('option_e'):
+                        options['E'] = params['option_e']
+                    if options:
+                        question_obj['options'] = options
+                
+                inserted_questions.append(question_obj)
                 
                 print(f"   ✅ Inserted question {new_id}: {params['question_text'][:50]}...")
                 
@@ -690,26 +727,28 @@ async def upload_new_questions(
                 error_msg = str(e)
                 errors.append({
                     "row": idx + 2,
-                    "question": str(row.get('question_text', ''))[:50] if pd.notna(row.get('question_text')) else "N/A",
+                    "question_text": str(row.get('question_text', ''))[:100] if pd.notna(row.get('question_text')) else "N/A",
                     "error": error_msg
                 })
                 print(f"   ⚠️  Error on row {idx + 2}: {error_msg}")
                 continue
         
         # Commit all inserts
-        if inserted_ids:
+        if inserted_questions:
             db.commit()
-            print(f"✅ Successfully inserted {len(inserted_ids)} questions")
+            print(f"✅ Successfully inserted {len(inserted_questions)} questions")
         else:
             db.rollback()
             print(f"❌ No questions inserted")
 
         return {
-            "success": len(inserted_ids) > 0,
-            "message": f"Successfully uploaded {len(inserted_ids)} out of {len(df)} questions",
-            "inserted_count": len(inserted_ids),
-            "inserted_ids": inserted_ids,
+            "success": len(inserted_questions) > 0,
+            "message": f"Successfully uploaded {len(inserted_questions)} out of {len(df)} questions",
+            "file_name": file.filename,
+            "total_rows": len(df),
+            "inserted_count": len(inserted_questions),
             "error_count": len(errors),
+            "questions": inserted_questions,  # ← Full question details for review
             "errors": errors if errors else None
         }
         
@@ -718,7 +757,7 @@ async def upload_new_questions(
         print(f"❌ Upload failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
     
-
+    
 
 # API #6: Version Diff
 @router.get("/{id}/diff/{version_id}")
