@@ -38,8 +38,15 @@ CREATE TABLE assessments (
     assessment_acadyear TEXT,
     assessment_semester TEXT,
     created_at TIMESTAMP DEFAULT NOW(),
-    created_by INTEGER REFERENCES users(user_id) ON DELETE SET NULL,
-    CONSTRAINT uq_assessments_unique UNIQUE (course_id, assessment_type, assessment_acadyear, assessment_semester)
+    created_by INTEGER REFERENCES users(user_id) ON DELETE SET NULL
+);
+
+CREATE UNIQUE INDEX uq_assessments_unique_idx
+ON assessments (
+  course_id,
+  assessment_type,
+  COALESCE(assessment_acadyear, ''),
+  COALESCE(assessment_semester, '')
 );
 
 -- ================================================================
@@ -71,11 +78,13 @@ CREATE TABLE questions (
     sub_question_number TEXT,
     question_text TEXT NOT NULL,
     question_type VARCHAR(50),
+
     option_a TEXT,
     option_b TEXT,
     option_c TEXT,
     option_d TEXT,
     option_e TEXT,
+    
     correct_answer TEXT,
     explanation TEXT,
     points NUMERIC DEFAULT 1.0,

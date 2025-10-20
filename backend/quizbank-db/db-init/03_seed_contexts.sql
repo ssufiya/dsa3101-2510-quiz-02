@@ -28,11 +28,19 @@ BEGIN
       v_acad_year       := NULL;
       v_semester        := NULL;
     ELSE
-      -- e.g., DSA1101_Sem1_2425_Quiz6_context.csv
+    -- e.g., DSA1101_Sem1_2425_Quiz6_questions.csv
       v_course_code     := split_part(csv_file, '_', 1);
-      v_semester        := split_part(csv_file, '_', 2);
-      v_acad_year       := split_part(csv_file, '_', 3);
-      v_assessment_type := split_part(csv_file, '_', 4);
+
+      IF csv_file LIKE '%Sem%' THEN
+        v_semester := split_part(csv_file, '_', 2);
+        v_acad_year           := split_part(csv_file, '_', 3);
+        v_assessment_type     := split_part(csv_file, '_', 4);
+      ELSE
+        v_semester := NULL;
+        v_acad_year           := NULL;
+        v_assessment_type := split_part(csv_file, '_', 2);
+      END IF;
+
     END IF;
 
     -- Ensure course
@@ -45,9 +53,11 @@ BEGIN
 
     -- Ensure assessment (created_by null for now)
     EXECUTE format(
-      'INSERT INTO assessments(course_id, assessment_type, assessment_acadyear, assessment_semester)
-       VALUES (%s,%L,%L,%L)
-       ON CONFLICT (course_id, assessment_type, assessment_acadyear, assessment_semester) DO NOTHING;',
+      $sql$
+      INSERT INTO assessments(course_id, assessment_type, assessment_acadyear, assessment_semester)
+      VALUES (%s, %L, %L, %L)
+      ON CONFLICT DO NOTHING;
+      $sql$,
       v_course_id, v_assessment_type, v_acad_year, v_semester
     );
     SELECT assessment_id INTO v_assessment_id
