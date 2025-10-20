@@ -9,7 +9,7 @@ import os
 # Database URL
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql://postgres:postgres@localhost:5433/quizbank"
+    "postgresql://postgres:postgres@localhost:5432/quizbank"
 )
 
 # Create engine

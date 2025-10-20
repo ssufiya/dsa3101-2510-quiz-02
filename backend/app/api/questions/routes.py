@@ -16,6 +16,9 @@ from app.utils.validation import validate_question_data
 from pathlib import Path
 import shutil
 import subprocess
+import pandas as pd 
+import io
+
 
 router = APIRouter()
 
@@ -498,227 +501,156 @@ async def upload_new_version(
 
 
 # API #5: Uploading a NEW Quiz/Question
+
+def validate_question_data(question: dict):
+    """Check required fields; returns list of error strings"""
+    errors = []
+    if not question.get("question_text"):
+        errors.append("Missing required field; question_text")
+    if not question.get("difficulty"):
+        errors.append("Missing required field; difficulty")
+    if not question.get("concepts"):
+        errors.append("Missing required field; concepts")
+    return errors
+
+
+def parse_csv(csv_bytes: bytes):
+    """Parse CSV bytes into list of dicts"""
+    df = pd.read_csv(io.BytesIO(csv_bytes))
+    df.columns = [col.strip().lower().replace(" ", "_") for col in df.columns]
+    return df.to_dict(orient="records")
+
 @router.post("/upload")
 async def upload_new_questions(
     file: UploadFile = File(...),
-    user_id: int = 1,
+    user_id: int = None,  # optional
     db: Session = Depends(get_db)
 ):
-    """Upload CSV and immediately insert questions into database"""
-    import pandas as pd
-    import io
-    
-    print(f"📥 Upload started: {file.filename}")
-    
     try:
-        if not file.filename.endswith('.csv'):
+        if not file.filename.endswith(".csv"):
             raise HTTPException(status_code=400, detail="Only CSV files are allowed")
-        
-        # Read file
+
         contents = await file.read()
-        print(f"📄 File read: {len(contents)} bytes")
-        
-        # Parse CSV
-        df = pd.read_csv(io.BytesIO(contents))
-        print(f"📊 Parsed CSV: {len(df)} rows")
-        print(f"📋 Columns: {list(df.columns)}")
-        
-        if df.empty:
-            raise HTTPException(status_code=400, detail="No valid questions found in CSV")
-        
-        # Map your column names to database column names
-        column_mapping = {
-            'Question Text': 'question_text',
-            'Question Type': 'question_type',
-            'Option A': 'option_a',
-            'Option B': 'option_b',
-            'Option C': 'option_c',
-            'Option D': 'option_d',
-            'Option E': 'option_e',
-            'Correct Answer': 'correct_answer',
-            'Difficulty': 'difficulty',
-            'Concepts': 'concepts',
-            'Explanation': 'explanation',
-            'Points': 'points',
-            'Question Number': 'question_number',
-            'Sub-Question Number': 'sub_question_number',
-            'Context ID': 'context_id',
-            'Attachment': 'attachment'
-        }
-        
-        # Rename columns
-        df = df.rename(columns=column_mapping)
-        
-        inserted_ids = []
+
+        # ===== STEP 0: PARSE COURSE CODE FROM FILENAME =====
+        filename = Path(file.filename).name
+        course_code = filename.split("_")[0]
+
+        result = db.execute(
+            text("SELECT course_id, course_name FROM courses WHERE course_code = :code LIMIT 1"),
+            {"code": course_code}
+        )
+        course_row = result.fetchone()
+        if not course_row:
+            raise HTTPException(status_code=400, detail=f"Course code '{course_code}' not found in database")
+        course_id, course_name = course_row
+
+        # ===== STEP 1: READ CSV =====
+        df = None
+        for enc in ['utf-8', 'latin1', 'iso-8859-1', 'windows-1252', 'cp1252']:
+            try:
+                df = pd.read_csv(io.BytesIO(contents), encoding=enc)
+                break
+            except UnicodeDecodeError:
+                continue
+        if df is None:
+            raise HTTPException(status_code=400, detail="Unable to decode CSV file")
+
+        df.columns = [col.strip().lower().replace(" ", "_") for col in df.columns]
+        questions_data = df.to_dict(orient="records")
+
+        # ===== STEP 2: SAVE CSV TO DATA FOLDER =====
+        data_dir = Path(__file__).parent.parent.parent.parent / "quizbank-db" / "db-init" / "data"
+        data_dir.mkdir(parents=True, exist_ok=True)
+        dest_file_path = data_dir / file.filename
+        if dest_file_path.exists():
+            raise HTTPException(status_code=400, detail=f"File {file.filename} already exists")
+        with open(dest_file_path, "wb") as f:
+            f.write(contents)
+
+        # ===== STEP 3: INSERT QUESTIONS =====
+        inserted_count = 0
         errors = []
 
-        # Extract course info from filename
-        # e.g., "DSA1101_Test3_questions.csv" → "DSA1101"
-        filename_parts = file.filename.replace('.csv', '').split('_')
-        default_course_code = filename_parts[0] if filename_parts else 'UNKNOWN'
-        default_assessment_type = filename_parts[1] if len(filename_parts) > 1 else 'Quiz'
-        
-        print(f"📚 Detected course: {default_course_code}, assessment: {default_assessment_type}")
-
-        for idx, row in df.iterrows():
+        for idx, question in enumerate(questions_data, 1):
             try:
-                # Skip if question text is empty
-                if pd.isna(row.get('question_text')) or str(row.get('question_text')).strip() == '':
-                    print(f"   ⏭️  Skipping row {idx + 2}: Empty question text")
+                # Validate
+                validation_errors = validate_question_data(question)
+                if validation_errors:
+                    errors.append({
+                        "row": idx,
+                        "question": question.get("question_text", "N/A")[:50],
+                        "error": validation_errors
+                    })
                     continue
-                
-                # Get course_code (from filename or row data)
-                course_code = str(row.get('course_code', default_course_code))
-                
-                # Check if course exists
-                course_check = db.execute(
-                    text("SELECT course_id FROM courses WHERE course_code = :code"),
-                    {"code": course_code}
-                ).fetchone()
-                
-                if course_check:
-                    course_id = course_check[0]
-                else:
-                    # Create new course
-                    course_result = db.execute(
-                        text("""
-                            INSERT INTO courses (course_code, course_name)
-                            VALUES (:code, :name)
-                            RETURNING course_id
-                        """),
-                        {
-                            "code": course_code,
-                            "name": f"Course {course_code}"
-                        }
-                    )
-                    course_id = course_result.fetchone()[0]
-                    print(f"   ✨ Created course: {course_code}")
-                
-                # Get or create assessment
-                assessment_type = str(row.get('assessment_type', default_assessment_type))
-                assessment_year = str(row.get('assessment_acadyear', '2024/2025'))
-                
-                assessment_check = db.execute(
-                    text("""
-                        SELECT assessment_id FROM assessments 
-                        WHERE course_id = :course_id 
-                        AND assessment_type = :type
-                        AND COALESCE(assessment_acadyear, '') = COALESCE(:year, '')
-                    """),
-                    {
-                        "course_id": course_id,
-                        "type": assessment_type,
-                        "year": assessment_year
-                    }
-                ).fetchone()
-                
-                if assessment_check:
-                    assessment_id = assessment_check[0]
-                else:
-                    assessment_result = db.execute(
-                        text("""
-                            INSERT INTO assessments (
-                                course_id, assessment_type, assessment_acadyear
-                            )
-                            VALUES (:course_id, :type, :year)
-                            RETURNING assessment_id
-                        """),
-                        {
-                            "course_id": course_id,
-                            "type": assessment_type,
-                            "year": assessment_year
-                        }
-                    )
-                    assessment_id = assessment_result.fetchone()[0]
-                    print(f"   ✨ Created assessment: {assessment_type}")
-                
+
+                # Determine created_by safely
+                created_by_id = None
+                if user_id:
+                    res = db.execute(text("SELECT user_id FROM users WHERE user_id = :uid"), {"uid": user_id})
+                    if res.fetchone():
+                        created_by_id = user_id
+
                 # Build insert query
-                insert_fields = [
-                    "course_id", "assessment_id", "question_text", 
-                    "question_type", "version_number", "is_latest"
-                ]
-                insert_values = [
-                    ":course_id", ":assessment_id", ":question_text",
-                    ":question_type", "1", "TRUE"
-                ]
-                
+                fields = ["question_text", "difficulty", "concepts", "course_id", "version_number"]
+                values = [":question_text", ":difficulty", ":concepts", ":course_id", "1"]
                 params = {
-                    "course_id": course_id,
-                    "assessment_id": assessment_id,
-                    "question_text": str(row['question_text']).strip(),
-                    "question_type": str(row.get('question_type', 'MCQ'))
+                    "question_text": question.get("question_text"),
+                    "difficulty": question.get("difficulty"),
+                    "concepts": question.get("concepts"),
+                    "course_id": course_id
                 }
-                
-                # Add optional fields
-                optional_fields = {
-                    'difficulty': 'difficulty',
-                    'concepts': 'concepts',
-                    'correct_answer': 'correct_answer',
-                    'option_a': 'option_a',
-                    'option_b': 'option_b',
-                    'option_c': 'option_c',
-                    'option_d': 'option_d',
-                    'option_e': 'option_e',
-                    'explanation': 'explanation',
-                    'points': 'points',
-                    'question_number': 'question_number',
-                    'sub_question_number': 'sub_question_number'
-                }
-                
-                for csv_col, db_col in optional_fields.items():
-                    if csv_col in df.columns and pd.notna(row.get(csv_col)):
-                        value = str(row.get(csv_col)).strip()
-                        if value:  # Only add if not empty
-                            insert_fields.append(db_col)
-                            insert_values.append(f":{db_col}")
-                            params[db_col] = value
-                
-                # Insert question
-                insert_query = text(f"""
-                    INSERT INTO questions ({', '.join(insert_fields)})
-                    VALUES ({', '.join(insert_values)})
-                    RETURNING question_id
-                """)
-                
-                result = db.execute(insert_query, params)
-                new_id = result.fetchone()[0]
-                inserted_ids.append(new_id)
-                
-                print(f"   ✅ Inserted question {new_id}: {params['question_text'][:50]}...")
-                
+
+                if created_by_id:
+                    fields.append("created_by")
+                    values.append(":created_by")
+                    params["created_by"] = created_by_id
+
+                for field in ["correct_answer", "option_a", "option_b", "option_c", "option_d", "option_e",
+                              "explanation", "points", "question_number", "sub_question_number", "question_type", "context"]:
+                    if question.get(field) is not None:
+                        fields.append(field)
+                        values.append(f":{field}")
+                        params[field] = question.get(field)
+
+                query = f"INSERT INTO questions ({', '.join(fields)}) VALUES ({', '.join(values)})"
+                db.execute(text(query), params)
+                inserted_count += 1
+
             except Exception as e:
-                error_msg = str(e)
                 errors.append({
-                    "row": idx + 2,
-                    "question": str(row.get('question_text', ''))[:50] if pd.notna(row.get('question_text')) else "N/A",
-                    "error": error_msg
+                    "row": idx,
+                    "question": question.get("question_text", "N/A")[:50],
+                    "error": str(e)
                 })
-                print(f"   ⚠️  Error on row {idx + 2}: {error_msg}")
                 continue
-        
-        # Commit all inserts
-        if inserted_ids:
+
+        if inserted_count > 0:
             db.commit()
-            print(f"✅ Successfully inserted {len(inserted_ids)} questions")
+            return {
+                "success": True,
+                "message": f"File saved and {inserted_count} questions loaded successfully",
+                "file_path": str(dest_file_path),
+                "questions_loaded": inserted_count,
+                "error_count": len(errors),
+                "errors": errors if errors else None
+            }
         else:
             db.rollback()
-            print(f"❌ No questions inserted")
+            return {
+                "success": False,
+                "message": "File saved but no questions were loaded. Check errors for details.",
+                "file_path": str(dest_file_path),
+                "questions_loaded": 0,
+                "error_count": len(errors),
+                "errors": errors
+            }
 
-        return {
-            "success": len(inserted_ids) > 0,
-            "message": f"Successfully uploaded {len(inserted_ids)} out of {len(df)} questions",
-            "inserted_count": len(inserted_ids),
-            "inserted_ids": inserted_ids,
-            "error_count": len(errors),
-            "errors": errors if errors else None
-        }
-        
+    except HTTPException:
+        raise
     except Exception as e:
         db.rollback()
-        print(f"❌ Upload failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
-    
-
+        raise HTTPException(status_code=500, detail=f"Failed to upload questions: {str(e)}")
 
 # API #6: Version Diff
 @router.get("/{id}/diff/{version_id}")
