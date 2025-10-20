@@ -287,8 +287,8 @@ def main():
     # Convert XLSX files to CSV first
     data_dir = Path(__file__).parent.parent / 'data'
     if data_dir.exists():
-        from scripts.convert_xlsx_to_csv import convert_xlsx_to_csv
-        convert_xlsx_to_csv(data_dir)
+        from scripts.xlsx_to_csv import convert_xlsx_to_csv
+        convert_xlsx_to_csv()
     
     # Wait for database to be ready
     if not wait_for_db():
