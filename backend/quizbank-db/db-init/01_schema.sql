@@ -15,8 +15,8 @@ DROP TABLE IF EXISTS users CASCADE;
 -- ================================================================
 CREATE TABLE users (
     user_id SERIAL PRIMARY KEY,
-    name TEXT,
-    email TEXT UNIQUE
+    username TEXT,
+    password_hash TEXT NOT NULL
 );
 
 -- ================================================================
@@ -36,7 +36,10 @@ CREATE TABLE assessments (
     course_id INTEGER NOT NULL REFERENCES courses(course_id) ON DELETE CASCADE,
     assessment_type TEXT NOT NULL,
     assessment_acadyear TEXT,
-    CONSTRAINT uq_assessments_unique UNIQUE (course_id, assessment_type, assessment_acadyear)
+    assessment_semester TEXT,
+    created_at TIMESTAMP DEFAULT NOW(),
+    created_by INTEGER REFERENCES users(user_id) ON DELETE SET NULL,
+    CONSTRAINT uq_assessments_unique UNIQUE (course_id, assessment_type, assessment_acadyear, assessment_semester)
 );
 
 -- ================================================================
@@ -45,13 +48,12 @@ CREATE TABLE assessments (
 -- ================================================================
 CREATE TABLE contexts (
     context_id SERIAL PRIMARY KEY,
+    assessment_id INTEGER NOT NULL REFERENCES assessments(assessment_id) ON DELETE CASCADE,
     course_id INTEGER NOT NULL REFERENCES courses(course_id) ON DELETE CASCADE,
-    assessment_type TEXT NOT NULL,
-    assessment_acadyear TEXT,
     context_local_id TEXT,
     context_text TEXT,
     context_attachment TEXT,
-    CONSTRAINT uq_contexts_key UNIQUE (course_id, assessment_type, assessment_acadyear, context_local_id)
+    CONSTRAINT uq_contexts_key UNIQUE (assessment_id, context_local_id)
 );
 
 -- ================================================================
@@ -79,9 +81,11 @@ CREATE TABLE questions (
     points NUMERIC DEFAULT 1.0,
     difficulty VARCHAR(50),
     concepts TEXT,
-    attachment_raw TEXT,  -- stores the raw attachment string if you want to debug later
 
     created_at TIMESTAMP DEFAULT NOW(),
+    created_by INTEGER REFERENCES users(user_id) ON DELETE SET NULL,
+    version_number INTEGER DEFAULT 1,
+    previous_version_id INTEGER REFERENCES questions(question_id) DEFERRABLE INITIALLY DEFERRED,
 
     CONSTRAINT uq_questions_dedupe UNIQUE (course_id, assessment_id, question_text)
 );
@@ -105,6 +109,8 @@ CREATE TABLE attachments (
 -- Helpful indexes
 -- ================================================================
 CREATE INDEX idx_questions_context_id ON questions(context_id);
+CREATE INDEX idx_questions_assessment_id ON questions(assessment_id);
+CREATE INDEX idx_contexts_assessment_id ON contexts(assessment_id);
 CREATE INDEX idx_contexts_course_id ON contexts(course_id);
 CREATE INDEX idx_attachments_question_id ON attachments(question_id);
 CREATE INDEX idx_attachments_context_id ON attachments(context_id);
