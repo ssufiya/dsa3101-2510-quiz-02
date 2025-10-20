@@ -274,8 +274,9 @@ def load_questions(session, csv_path):
             print(f"  ✗ Row {idx}: Error - {str(e)}")
             errors += 1
     
+    
     session.commit()
-    print(f"  ✓ Loaded {count} questions ({errors} errors)")
+    
 
 
 def main():
