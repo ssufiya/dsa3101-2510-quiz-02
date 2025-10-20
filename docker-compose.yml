@@ -14,7 +14,7 @@ services:
       - "${DB_EXTERNAL_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./quizbank-db:/docker-entrypoint-initdb.d
+      - ./backend/quizbank-db/db-init:/docker-entrypoint-initdb.d  # SQL init files
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
@@ -31,7 +31,7 @@ services:
     container_name: quizbank-backend
     restart: unless-stopped
     ports:
-      - "${BACKEND_PORT:-5003}:5000"
+      - "${BACKEND_PORT:-5000}:5000"
     env_file:
       - .env  # Reads from root .env
     environment:

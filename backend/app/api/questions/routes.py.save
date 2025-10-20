@@ -497,8 +497,8 @@ async def upload_new_version(
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 
-# API #5: Uploading a NEW Quiz/Question
-@router.post("/upload")
+
+# API #5: Uploading a NEW Quiz/Question@router.post("/upload")
 async def upload_new_questions(
     file: UploadFile = File(...),
     user_id: int = 1,
@@ -718,7 +718,56 @@ async def upload_new_questions(
         print(f"❌ Upload failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
     
+=======
+async def upload_new_questions(file: UploadFile = File(...)):
+    """
+    Upload CSV to db-init/data and rebuild the database automatically.
+    """
+    ROOT_DIR = Path(__file__).resolve().parent.parent.parent.parent  # backend/
+    DATA_DIR = ROOT_DIR / "quizbank-db" / "db-init" / "data"
+    INIT_SCRIPT = ROOT_DIR / "scripts" / "init_db.py"
 
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+    if not file.filename.endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Only CSV files are allowed")
+
+    save_path = DATA_DIR / file.filename
+
+    if save_path.exists():
+        raise HTTPException(status_code=400, detail=f"File {file.filename} already exists")
+
+    try:
+        with save_path.open("wb") as f:
+            shutil.copyfileobj(file.file, f)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save CSV: {str(e)}")
+
+    if not INIT_SCRIPT.exists():
+        raise HTTPException(status_code=500, detail=f"DB init script not found: {INIT_SCRIPT}")
+
+    try:
+        result = subprocess.run(
+            ["python3", str(INIT_SCRIPT.resolve())],
+            cwd=str(INIT_SCRIPT.parent),
+            capture_output=True,
+            text=True,
+            check=True
+        )
+    except subprocess.CalledProcessError as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"DB rebuild failed:\n{e.stderr or e.stdout}"
+        )
+
+    return {
+        "success": True,
+        "message": f"CSV uploaded successfully and database rebuilt using {file.filename}.",
+        "file_path": str(save_path),
+        "db_rebuild_log": result.stdout
+    }
+
+>>>>>>> cea2f4a184c1ffcd171843a4ce53e9ebf0c61674
 
 # API #6: Version Diff
 @router.get("/{id}/diff/{version_id}")

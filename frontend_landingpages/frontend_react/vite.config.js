@@ -8,6 +8,7 @@ export default defineConfig({
     proxy: {
       'api/questions/upload': 'http://localhost:8000',
       'api/questions/': 'http://localhost:8000'
+
     },
   },
 })
