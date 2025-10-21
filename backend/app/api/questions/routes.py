@@ -4,9 +4,9 @@ API routes for Questions
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from sqlalchemy.orm import Session
 from sqlalchemy import text 
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from rapidfuzz import fuzz
-from difflib import HtmlDiff, unified_diff
+from difflib import HtmlDiff, unified_diff, SequenceMatcher
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
@@ -16,6 +16,9 @@ from app.utils.validation import validate_question_data
 from pathlib import Path
 import shutil
 import subprocess
+import pandas as pd 
+import io
+
 
 router = APIRouter()
 
@@ -25,27 +28,26 @@ async def get_questions(
     id: Optional[int] = Query(None, description="Filter by question ID"),
     subject: Optional[str] = Query(None, description="Filter by subject/course"),
     difficulty: Optional[str] = Query(None, description="Filter by difficulty"),
+    type: Optional[str] = Query(None, description="Filter by question type"),
     semester: Optional[str] = Query(None, description="Filter by semester"),
     topic: Optional[str] = Query(None, description="Filter by one or more topics"),
-    match: Optional[str] = Query("any", description="Match mode for multi-topic filtering: 'any' (OR) or 'all' (AND)"),
+    match: Optional[str] = Query("all", description="Match mode: 'any' (OR) or 'all' (AND) across all filters"),
     fuzzy: Optional[bool] = Query(True, description="Enable fuzzy matching for topic keywords"),
     is_latest: Optional[bool] = Query(True, description="Only return latest versions"),
     db: Session = Depends(get_db)
 ):
     """
     GET /api/questions
-    
-    Returns all questions with optional filters:
-    - id: Filter by question ID
-    - subject: Filter by course/subject
-    - difficulty: Filter by difficulty level
-    - topic: One or more topics (supports fuzzy match)
-    
-    Used in: QuestionLibrary, AssessmentPreview/QuestionCart, QuestionDetails
+    Returns all questions with flexible filtering.
+
+    Example:
+    - ?difficulty=low&subject=dsa1101&match=all → Intersection (AND)
+    - ?difficulty=low&subject=dsa1101&match=any → Union (OR)
+    - ?topic=regression,data manipulation&match=any → Any topic (OR fuzzy match)
     """
-    # TODO: Implement filtering logic
-    # Return question with corresponding tags (course, semester, difficulty, etc.)
+
     try:
+        # Base query and parameter dict
         query_str = """
             SELECT 
                 q.question_id, 
@@ -66,35 +68,48 @@ async def get_questions(
             WHERE 1=1
         """
         params = {}
+        conditions = []
 
-        # --- Filter: question ID ---
+        # --- ID Filter ---
         if id is not None:
-            query_str += " AND q.question_id = :id"
+            conditions.append("q.question_id = :id")
             params["id"] = id
 
-        # --- Filter: subject / course ---
+        # --- Subject / Course Filter ---
         if subject is not None:
-            query_str += " AND (c.course_code ILIKE :subject OR c.course_name ILIKE :subject)"
+            conditions.append("(c.course_code ILIKE :subject OR c.course_name ILIKE :subject)")
             params["subject"] = f"%{subject}%"
 
-        # --- Filter: difficulty ---
+        # --- Difficulty Filter ---
         if difficulty is not None:
-            query_str += " AND q.difficulty = :difficulty"
+            conditions.append("q.difficulty = :difficulty")
             params["difficulty"] = difficulty
 
-        # --- Filter: semester ---
+        # --- Question Type Filter ---
+        if type is not None:
+            conditions.append("q.question_type =:question_type")
+            params["question_type"] = type
+
+        # --- Semester Filter ---
         if semester is not None:
-            query_str += " AND a.assessment_type ILIKE :semester"
+            conditions.append("a.assessment_type ILIKE :semester")
             params["semester"] = f"%{semester}%"
-            
-        # --- Filter: only latest versions ---
+
+        # --- Latest Version Filter ---
         if is_latest:
-            query_str += " AND q.is_latest = TRUE"
+            conditions.append("q.is_latest = TRUE")
+
+        # --- Combine Conditions: AND vs OR ---
+        if conditions:
+            if match == "any":
+                query_str += " AND (" + " OR ".join(conditions) + ")"
+            else:
+                query_str += " AND " + " AND ".join(conditions)
 
         # --- Execute base query first ---
         base_results = db.execute(text(query_str), params).fetchall()
-        
-        # --- Handle topics (with optional fuzzy match) ---
+
+        # --- Handle Topics (with optional fuzzy match) ---
         if topic:
             topics = [t.strip().lower() for t in topic.split(",") if t.strip()]
             filtered_rows = []
@@ -102,23 +117,22 @@ async def get_questions(
             for row in base_results:
                 question_topics = [t.strip().lower() for t in (row.concepts.split(",") if row.concepts else [])]
 
-                # Fuzzy or exact matching logic
-                matches = []
+                topic_matches = []
                 for user_topic in topics:
                     if fuzzy:
-                        # Compare with threshold 70/100 (threshold can be adjusted)
+                        # Fuzzy partial ratio threshold = 70
                         match_found = any(fuzz.partial_ratio(user_topic, qt) > 70 for qt in question_topics)
                     else:
                         match_found = any(user_topic in qt for qt in question_topics)
-                    matches.append(match_found)
+                    topic_matches.append(match_found)
 
-                # Apply match mode: 'all' or 'any'
-                if (match == "all" and all(matches)) or (match != "all" and any(matches)):
+                # Apply topic match logic
+                if (match == "all" and all(topic_matches)) or (match != "all" and any(topic_matches)):
                     filtered_rows.append(row)
         else:
             filtered_rows = base_results
-        
 
+        # --- Format output ---
         questions = []
         for row in filtered_rows:
             questions.append({
@@ -141,17 +155,16 @@ async def get_questions(
             "count": len(questions),
             "data": questions
         }
-    
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
-
 
 # API #2: More Question Details
 @router.get("/{id}")
 async def get_question_by_id(id: int, db: Session = Depends(get_db)):
     """
     GET /api/questions/:id
-    Returns full question content
+    Returns full question content with context and attachments
     """
     try: 
         query = text("""
@@ -161,14 +174,18 @@ async def get_question_by_id(id: int, db: Session = Depends(get_db)):
                 c.course_name,
                 a.assessment_type,
                 ctx.context_text,
-                STRING_AGG(att.attachment_name, ', ') as attachment_names
+                ctx.context_attachment,
+                STRING_AGG(DISTINCT att_q.attachment_name, ', ') as question_attachments,
+                STRING_AGG(DISTINCT att_ctx.attachment_name, ', ') as context_attachments
             FROM questions q
             LEFT JOIN courses c ON q.course_id = c.course_id
             LEFT JOIN assessments a ON q.assessment_id = a.assessment_id
             LEFT JOIN contexts ctx ON q.context_id = ctx.context_id
-            LEFT JOIN attachments att ON q.question_id = att.question_id
+            LEFT JOIN attachments att_q ON q.question_id = att_q.question_id
+            LEFT JOIN attachments att_ctx ON ctx.context_id = att_ctx.context_id
             WHERE q.question_id = :id
-            GROUP BY q.question_id, c.course_code, c.course_name, a.assessment_type, ctx.context_text
+            GROUP BY q.question_id, c.course_code, c.course_name, a.assessment_type, 
+                     ctx.context_text, ctx.context_attachment
         """)
     
         result = db.execute(query, {"id": id})
@@ -177,13 +194,17 @@ async def get_question_by_id(id: int, db: Session = Depends(get_db)):
         if not row:
             raise HTTPException(status_code=404, detail="Question not found")
         
-        # Build response
+        # Build clean response
         response_data = {
             "question_id": row.question_id,
+            "question_number": row.question_number,
+            "sub_question_number": row.sub_question_number,
             "question_text": row.question_text,
             "question_type": row.question_type,
             "difficulty": row.difficulty,
             "correct_answer": row.correct_answer,
+            "explanation": row.explanation,
+            "points": float(row.points) if row.points else 1.0,
             "concepts": row.concepts.split(',') if row.concepts else [],
             "course_code": row.course_code,
             "course_name": row.course_name,
@@ -193,8 +214,8 @@ async def get_question_by_id(id: int, db: Session = Depends(get_db)):
             "previous_version_id": row.previous_version_id
         }
         
-        # Add MCQ options if applicable
-        if row.question_type == "MCQ":
+        # Add options based on question type
+        if row.question_type in ["MCQ", "MRQ"]:
             options = {}
             if row.option_a:
                 options["A"] = row.option_a
@@ -208,37 +229,48 @@ async def get_question_by_id(id: int, db: Session = Depends(get_db)):
                 options["E"] = row.option_e
             if options:
                 response_data["options"] = options
-
-        elif row.question_type == "True/False":
+        
+        elif row.question_type == "T/F":
             response_data["options"] = {
-                "True": "True",
-                "False": "False"
+                "A": row.option_a if row.option_a else "True",
+                "B": row.option_b if row.option_b else "False"
             }
         
-        # Add context if exists
-        if row.context_text:
-            response_data["context"] = {
-                "context_text": row.context_text
-            }
+        # Add context (shared across multiple questions)
+        if row.context_text or row.context_attachment or row.context_attachments:
+            context = {}
+            
+            if row.context_text:
+                context["text"] = row.context_text
+            
+            # Context attachments (images/files for the context)
+            context_files = []
+            
+            # From context_attachment column
+            if row.context_attachment:
+                context_files.append({
+                    "name": row.context_attachment,
+                    "url": f"/api/attachments/{row.context_attachment}"
+                })
+            
+            if context_files:
+                context["attachments"] = context_files
+            
+            if context:
+                response_data["context"] = context
         
-        # Add attachments if exist
-        if row.attachment_names:
-            attachments = row.attachment_names.split(', ')
-            response_data["uploaded_files"] = [
-                {
-                    "attachment_name": name,
-                    "attachment_url": f"/api/attachments/{name}"
-                }
-                for name in attachments
-            ]
-        
-        # Add tags
-        response_data["tags"] = {
-            "course": row.course_code,
-            "assessment": row.assessment_type,
-            "difficulty": row.difficulty,
-            "concepts": row.concepts.split(',') if row.concepts else []
-        }
+        # Add question-specific attachments
+
+        if row.question_attachments:
+            question_files = []
+            for name in row.question_attachments.split(', '):
+                if name.strip():
+                    question_files.append({
+                        "name": name.strip(),
+                        "url": f"/api/attachments/{name.strip()}"
+                    })
+            if question_files:
+                response_data["attachments"] = question_files
         
         return {
             "success": True,
@@ -249,6 +281,7 @@ async def get_question_by_id(id: int, db: Session = Depends(get_db)):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
 
 # API #3: Fetching ALL Versions
 @router.get("/{id}/versions")
@@ -349,8 +382,7 @@ async def get_question_versions(id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 
-
-# API #4: Uploading a NEW Question Version
+# API #4: Uploading new question version
 @router.post("/{id}/editversion")
 async def upload_new_version(
     id: int,
@@ -358,117 +390,127 @@ async def upload_new_version(
     db: Session = Depends(get_db)
 ):
     """
-    POST /api/question/{id}/editversion
-    
-    When users edit, we reupload a csv file (of edited question content).
-    This API should:
-    - Increment version_number by 1 (using latest version_number where is_latest = TRUE)
-    - Assign a new question_id
-    - Ensure correct previouse_version_id
-    - Change is_latest boolean
-    
-    A new row is created for every version, past versions are preserved.
-    
-    Used in: QuestionEdit
-    """
-    # TODO: Implement version creation
-    try: 
-        if not file.filename.endswith('.csv'):
-            raise HTTPException(status_code=400, detail="Only CSV files are allowed")
-        
-        contents = await file.read()
-        question_data = parse_csv_for_version(contents)
+    POST /api/questions/{id}/editversion
 
+    Upload a new CSV file containing edited question data to create a new version.
+    - Increments version_number
+    - Links to previous version via previous_version_id
+    - Marks old version's is_latest = FALSE
+    - Creates a new row for each question (preserving history)
+    """
+    try:
+        # ===== STEP 0: Validate file =====
+        if not file.filename.endswith(".csv"):
+            raise HTTPException(status_code=400, detail="Only CSV files are allowed")
+
+        contents = await file.read()
+
+        # ===== STEP 1: Find the parent question =====
+        current_query = text("""
+            SELECT question_id, course_id, assessment_id, version_number, is_latest
+            FROM questions
+            WHERE question_id = :id
+        """)
+        result = db.execute(current_query, {"id": id})
+        current = result.fetchone()
+        if not current:
+            raise HTTPException(status_code=404, detail=f"Parent question (ID={id}) not found")
+
+        # ===== STEP 2: Parse CSV =====
+        df = None
+        for enc in ['utf-8', 'latin1', 'iso-8859-1', 'windows-1252', 'cp1252']:
+            try:
+                df = pd.read_csv(io.BytesIO(contents), encoding=enc)
+                break
+            except UnicodeDecodeError:
+                continue
+        if df is None:
+            raise HTTPException(status_code=400, detail="Unable to decode CSV file")
+
+        df.columns = [col.strip().lower().replace(" ", "_") for col in df.columns]
+        questions_data = df.to_dict(orient="records")
+
+        if len(questions_data) != 1:
+            raise HTTPException(status_code=400, detail="Edit version file must contain exactly ONE question")
+
+        question_data = questions_data[0]
+
+        # ===== STEP 3: Validate data =====
         validation_errors = validate_question_data(question_data)
         if validation_errors:
             raise HTTPException(status_code=400, detail={"errors": validation_errors})
-        
-        current_query = text("""
-            SELECT previouse_version_id, version_number, is_latest, course_id, assessment_id
-            FROM questions
-            WHERE question_id = "id
-        """)
 
-        result = db.execute(current_query, {"id": id})
-        current = result.fetchone()
+        # ===== STEP 4: Lookup course and assessment =====
+        # (Reuse parent if not provided)
+        course_id = current.course_id
+        assessment_id = current.assessment_id
 
-        if not current:
-            raise HTTPException(status_code=404, detail="Question not found")
-        
-        # Lookup course_id
-        course_lookup = text("""
-            SELECT course_id FROM courses 
-            WHERE course_code = :course_code
-        """)
-        course_result = db.execute(course_lookup, {"course_code": question_data.get("course_code")})
-        course_row = course_result.fetchone()
-        course_id = course_row.course_id if course_row else current.course_id
+        if question_data.get("course_code"):
+            course_result = db.execute(
+                text("SELECT course_id FROM courses WHERE course_code = :code"),
+                {"code": question_data.get("course_code")}
+            ).fetchone()
+            if course_result:
+                course_id = course_result.course_id
 
-        # Lookup assessment_id
-        assessment_lookup = text("""
-            SELECT assessment_id FROM assessments 
-            WHERE assessment_type = :assessment_type
-        """)
-        assessment_result = db.execute(assessment_lookup, {"assessment_type": question_data.get("assessment_type")})
-        assessment_row = assessment_result.fetchone()
-        assessment_id = assessment_row.assessment_id if assessment_row else current.assessment_id
-        
-        previouse_version_id = current.previouse_version_id if current.previouse_version_id else id
-        new_version_number = current.version_number + 1
+        if question_data.get("assessment_type"):
+            assess_result = db.execute(
+                text("SELECT assessment_id FROM assessments WHERE assessment_type = :atype"),
+                {"atype": question_data.get("assessment_type")}
+            ).fetchone()
+            if assess_result:
+                assessment_id = assess_result.assessment_id
 
-        update_query = text("""
-            INSERT INTO questions (..., previous_version_id) 
-            VALUES (..., :old_question_id)
-        """)
-        db.execute(update_query, {"id": id})
+        # ===== STEP 5: Save CSV file to /quizbank-db/db-init/data =====
+        data_dir = Path(__file__).parent.parent.parent.parent / "quizbank-db" / "db-init" / "data"
+        data_dir.mkdir(parents=True, exist_ok=True)
 
+        # Rename file to include version info for traceability
+        versioned_filename = f"question_{id}_v{current.version_number + 1}_{file.filename}"
+        dest_file_path = data_dir / versioned_filename
+
+        if dest_file_path.exists():
+            raise HTTPException(status_code=400, detail=f"File {versioned_filename} already exists")
+
+        with open(dest_file_path, "wb") as f:
+            f.write(contents)
+
+        # ===== STEP 6: Update parent is_latest to FALSE =====
+        db.execute(
+            text("UPDATE questions SET is_latest = FALSE WHERE question_id = :id"),
+            {"id": id}
+        )
+
+        # ===== STEP 7: Prepare insert query for new version =====
         insert_fields = [
-            "question_text", "question_type", "difficulty", "concepts", "course_id", "assessment_id", "version_number", "previous_version_id", "is_latest"
+            "question_text", "difficulty", "concepts",
+            "course_id", "assessment_id",
+            "version_number", "previous_version_id", "is_latest"
         ]
         insert_values = [
-            ":question_text", ":question_type", ":difficulty", ":concepts", ":course_id", ":assessment_id", ":version_number", ":previous_version_id", "TRUE"
+            ":question_text", ":difficulty", ":concepts",
+            ":course_id", ":assessment_id",
+            ":version_number", ":previous_version_id", "TRUE"
         ]
-
         params = {
             "question_text": question_data.get("question_text"),
-            "question_type": question_data.get("question_type", current.question_type),
             "difficulty": question_data.get("difficulty"),
             "concepts": question_data.get("concepts"),
             "course_id": course_id,
             "assessment_id": assessment_id,
-            "version_number": new_version_number,
-            "previous_version_id": previous_version_id
+            "version_number": current.version_number + 1,
+            "previous_version_id": id
         }
 
-        if question_data.get("correct_answer"):
-            insert_fields.append("correct_answer")
-            insert_values.append(":correct_answer")
-            params["correct_answer"] = question_data.get("correct_answer")
-
-        if question_data.get("option_a"):
-            insert_fields.append("option_a")
-            insert_values.append(":option_a")
-            params["option_a"] = question_data.get("option_a")
-
-        if question_data.get("option_b"):
-            insert_fields.append("option_b")
-            insert_values.append(":option_b")
-            params["option_b"] = question_data.get("option_b")
-
-        if question_data.get("option_c"):
-            insert_fields.append("option_c")
-            insert_values.append(":option_c")
-            params["option_c"] = question_data.get("option_c")
-
-        if question_data.get("option_d"):
-            insert_fields.append("option_d")
-            insert_values.append(":option_d")
-            params["option_d"] = question_data.get("option_d")
-
-        if question_data.get("option_e"):
-            insert_fields.append("option_e")
-            insert_values.append(":option_e")
-            params["option_e"] = question_data.get("option_e")
+        # Optional fields (same pattern as API #5)
+        for field in [
+            "correct_answer", "option_a", "option_b", "option_c", "option_d", "option_e",
+            "explanation", "points", "question_number", "sub_question_number", "question_type", "context"
+        ]:
+            if question_data.get(field) is not None:
+                insert_fields.append(field)
+                insert_values.append(f":{field}")
+                params[field] = question_data.get(field)
 
         insert_query = text(f"""
             INSERT INTO questions ({', '.join(insert_fields)})
@@ -484,9 +526,9 @@ async def upload_new_version(
         return {
             "success": True,
             "message": "New version created successfully",
+            "previous_question_id": id,
             "new_question_id": new_id,
-            "version_number": new_version_number,
-            "previous_version_id": previous_version_id
+            "new_version_number": current.version_number + 1
         }
 
     except HTTPException:
@@ -497,278 +539,248 @@ async def upload_new_version(
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 
+
 # API #5: Uploading a NEW Quiz/Question
+
+def validate_question_data(question: dict):
+    """Check required fields; returns list of error strings"""
+    errors = []
+    if not question.get("question_text"):
+        errors.append("Missing required field; question_text")
+    if not question.get("difficulty"):
+        errors.append("Missing required field; difficulty")
+    if not question.get("concepts"):
+        errors.append("Missing required field; concepts")
+    return errors
+
+
+def parse_csv(csv_bytes: bytes):
+    """Parse CSV bytes into list of dicts"""
+    df = pd.read_csv(io.BytesIO(csv_bytes))
+    df.columns = [col.strip().lower().replace(" ", "_") for col in df.columns]
+    return df.to_dict(orient="records")
+
 @router.post("/upload")
 async def upload_new_questions(
     file: UploadFile = File(...),
-    user_id: int = 1,
+    user_id: int = None,  # optional
     db: Session = Depends(get_db)
 ):
-    """
-    Upload CSV and immediately insert questions into database.
-    Returns all uploaded questions for review.
-    """
-    import pandas as pd
-    import io
-    
-    print(f"📥 Upload started: {file.filename}")
-    
     try:
-        if not file.filename.endswith('.csv'):
+        if not file.filename.endswith(".csv"):
             raise HTTPException(status_code=400, detail="Only CSV files are allowed")
-        
-        # Read file
+
         contents = await file.read()
-        print(f"📄 File read: {len(contents)} bytes")
-        
-        # Parse CSV
-        df = pd.read_csv(io.BytesIO(contents))
-        print(f"📊 Parsed CSV: {len(df)} rows")
-        print(f"📋 Columns: {list(df.columns)}")
-        
-        if df.empty:
-            raise HTTPException(status_code=400, detail="No valid questions found in CSV")
-        
-        # Map column names
-        column_mapping = {
-            'Question Text': 'question_text',
-            'Question Type': 'question_type',
-            'Option A': 'option_a',
-            'Option B': 'option_b',
-            'Option C': 'option_c',
-            'Option D': 'option_d',
-            'Option E': 'option_e',
-            'Correct Answer': 'correct_answer',
-            'Difficulty': 'difficulty',
-            'Concepts': 'concepts',
-            'Explanation': 'explanation',
-            'Points': 'points',
-            'Question Number': 'question_number',
-            'Sub-Question Number': 'sub_question_number',
-            'Context ID': 'context_id',
-            'Attachment': 'attachment'
-        }
-        
-        df = df.rename(columns=column_mapping)
-        
-        inserted_questions = []  # ← Store full question details
+
+        # ===== STEP 0: PARSE COURSE CODE FROM FILENAME =====
+        filename = Path(file.filename).name
+        course_code = filename.split("_")[0]
+
+        result = db.execute(
+            text("SELECT course_id, course_name FROM courses WHERE course_code = :code LIMIT 1"),
+            {"code": course_code}
+        )
+        course_row = result.fetchone()
+        if not course_row:
+            raise HTTPException(status_code=400, detail=f"Course code '{course_code}' not found in database")
+        course_id, course_name = course_row
+
+        # ===== STEP 1: READ CSV =====
+        df = None
+        for enc in ['utf-8', 'latin1', 'iso-8859-1', 'windows-1252', 'cp1252']:
+            try:
+                df = pd.read_csv(io.BytesIO(contents), encoding=enc)
+                break
+            except UnicodeDecodeError:
+                continue
+        if df is None:
+            raise HTTPException(status_code=400, detail="Unable to decode CSV file")
+
+        df.columns = [col.strip().lower().replace(" ", "_") for col in df.columns]
+        questions_data = df.to_dict(orient="records")
+
+        # ===== STEP 2: SAVE CSV TO DATA FOLDER =====
+        data_dir = Path(__file__).parent.parent.parent.parent / "quizbank-db" / "db-init" / "data"
+        data_dir.mkdir(parents=True, exist_ok=True)
+        dest_file_path = data_dir / file.filename
+        if dest_file_path.exists():
+            raise HTTPException(status_code=400, detail=f"File {file.filename} already exists")
+        with open(dest_file_path, "wb") as f:
+            f.write(contents)
+
+        # ===== STEP 3: INSERT QUESTIONS =====
+        inserted_count = 0
+        inserted_questions = []
         errors = []
 
-        # Extract course info from filename
-        filename_parts = file.filename.replace('.csv', '').split('_')
-        default_course_code = filename_parts[0] if filename_parts else 'UNKNOWN'
-        default_assessment_type = filename_parts[1] if len(filename_parts) > 1 else 'Quiz'
-        
-        print(f"📚 Detected course: {default_course_code}, assessment: {default_assessment_type}")
-
-        for idx, row in df.iterrows():
+        for idx, question in enumerate(questions_data, 1):
             try:
-                # Skip if question text is empty
-                if pd.isna(row.get('question_text')) or str(row.get('question_text')).strip() == '':
-                    print(f"   ⏭️  Skipping row {idx + 2}: Empty question text")
+                # Validate
+                validation_errors = validate_question_data(question)
+                if validation_errors:
+                    errors.append({
+                        "row": idx,
+                        "question": question.get("question_text", "N/A")[:50],
+                        "error": validation_errors
+                    })
                     continue
-                
-                # Get course_code
-                course_code = str(row.get('course_code', default_course_code))
-                
-                # Check if course exists
-                course_check = db.execute(
-                    text("SELECT course_id FROM courses WHERE course_code = :code"),
-                    {"code": course_code}
-                ).fetchone()
-                
-                if course_check:
-                    course_id = course_check[0]
-                else:
-                    # Create new course
-                    course_result = db.execute(
-                        text("""
-                            INSERT INTO courses (course_code, course_name)
-                            VALUES (:code, :name)
-                            RETURNING course_id
-                        """),
-                        {
-                            "code": course_code,
-                            "name": f"Course {course_code}"
-                        }
-                    )
-                    course_id = course_result.fetchone()[0]
-                    print(f"   ✨ Created course: {course_code}")
-                
-                # Get or create assessment
-                assessment_type = str(row.get('assessment_type', default_assessment_type))
-                assessment_year = str(row.get('assessment_acadyear', '2024/2025'))
-                
-                assessment_check = db.execute(
-                    text("""
-                        SELECT assessment_id FROM assessments 
-                        WHERE course_id = :course_id 
-                        AND assessment_type = :type
-                        AND COALESCE(assessment_acadyear, '') = COALESCE(:year, '')
-                    """),
-                    {
-                        "course_id": course_id,
-                        "type": assessment_type,
-                        "year": assessment_year
-                    }
-                ).fetchone()
-                
-                if assessment_check:
-                    assessment_id = assessment_check[0]
-                else:
-                    assessment_result = db.execute(
-                        text("""
-                            INSERT INTO assessments (
-                                course_id, assessment_type, assessment_acadyear
-                            )
-                            VALUES (:course_id, :type, :year)
-                            RETURNING assessment_id
-                        """),
-                        {
-                            "course_id": course_id,
-                            "type": assessment_type,
-                            "year": assessment_year
-                        }
-                    )
-                    assessment_id = assessment_result.fetchone()[0]
-                    print(f"   ✨ Created assessment: {assessment_type}")
-                
+
+                # Determine created_by safely
+                created_by_id = None
+                if user_id:
+                    res = db.execute(text("SELECT user_id FROM users WHERE user_id = :uid"), {"uid": user_id})
+                    if res.fetchone():
+                        created_by_id = user_id
+
                 # Build insert query
-                insert_fields = [
-                    "course_id", "assessment_id", "question_text", 
-                    "question_type", "version_number", "is_latest"
-                ]
-                insert_values = [
-                    ":course_id", ":assessment_id", ":question_text",
-                    ":question_type", "1", "TRUE"
-                ]
-                
+                fields = ["question_text", "difficulty", "concepts", "course_id", "version_number"]
+                values = [":question_text", ":difficulty", ":concepts", ":course_id", "1"]
                 params = {
-                    "course_id": course_id,
-                    "assessment_id": assessment_id,
-                    "question_text": str(row['question_text']).strip(),
-                    "question_type": str(row.get('question_type', 'MCQ'))
+                    "question_text": question.get("question_text"),
+                    "difficulty": question.get("difficulty"),
+                    "concepts": question.get("concepts"),
+                    "course_id": course_id
                 }
-                
-                # Add optional fields
-                optional_fields = {
-                    'difficulty': 'difficulty',
-                    'concepts': 'concepts',
-                    'correct_answer': 'correct_answer',
-                    'option_a': 'option_a',
-                    'option_b': 'option_b',
-                    'option_c': 'option_c',
-                    'option_d': 'option_d',
-                    'option_e': 'option_e',
-                    'explanation': 'explanation',
-                    'points': 'points',
-                    'question_number': 'question_number',
-                    'sub_question_number': 'sub_question_number'
+
+                if created_by_id:
+                    fields.append("created_by")
+                    values.append(":created_by")
+                    params["created_by"] = created_by_id
+
+                for field in ["correct_answer", "option_a", "option_b", "option_c", "option_d", "option_e",
+                              "explanation", "points", "question_number", "sub_question_number", "question_type", "context"]:
+                    if question.get(field) is not None:
+                        fields.append(field)
+                        values.append(f":{field}")
+                        params[field] = question.get(field)
+
+                query = f"INSERT INTO questions ({', '.join(fields)}) VALUES ({', '.join(values)})"
+                db.execute(text(query), params)
+                inserted_count += 1
+
+                # ← Store the inserted question details for preview
+                question_preview = {
+                    "question_text": question.get("question_text"),
+                    "question_type": question.get("question_type"),
+                    "difficulty": question.get("difficulty"),
+                    "concepts": question.get("concepts"),
+                    "correct_answer": question.get("correct_answer"),
+                    "option_a": question.get("option_a"),
+                    "option_b": question.get("option_b"),
+                    "option_c": question.get("option_c"),
+                    "option_d": question.get("option_d"),
+                    "option_e": question.get("option_e"),
+                    "explanation": question.get("explanation"),
+                    "points": question.get("points"),
+                    "question_number": question.get("question_number"),
+                    "sub_question_number": question.get("sub_question_number")
                 }
-                
-                for csv_col, db_col in optional_fields.items():
-                    if csv_col in df.columns and pd.notna(row.get(csv_col)):
-                        value = str(row.get(csv_col)).strip()
-                        if value:
-                            insert_fields.append(db_col)
-                            insert_values.append(f":{db_col}")
-                            params[db_col] = value
-                
-                # Insert question
-                insert_query = text(f"""
-                    INSERT INTO questions ({', '.join(insert_fields)})
-                    VALUES ({', '.join(insert_values)})
-                    RETURNING question_id
-                """)
-                
-                result = db.execute(insert_query, params)
-                new_id = result.fetchone()[0]
-                
-                # Build complete question object for response
-                question_obj = {
-                    "question_id": new_id,
-                    "question_number": params.get('question_number'),
-                    "sub_question_number": params.get('sub_question_number'),
-                    "question_text": params['question_text'],
-                    "question_type": params['question_type'],
-                    "difficulty": params.get('difficulty'),
-                    "concepts": params.get('concepts', '').split(',') if params.get('concepts') else [],
-                    "correct_answer": params.get('correct_answer'),
-                    "explanation": params.get('explanation'),
-                    "points": params.get('points'),
-                    "course_code": course_code,
-                    "assessment_type": assessment_type,
-                    "assessment_year": assessment_year,
-                    "version_number": 1,
-                    "is_latest": True
+                # Replace NaN with None for JSON serialization
+                import math
+                question_preview = {
+                    k: (None if isinstance(v, float) and math.isnan(v) else v)
+                    for k, v in question_preview.items()
                 }
-                
-                # Add options if MCQ
-                if params['question_type'] in ['MCQ', 'Multiple Choice']:
-                    options = {}
-                    if params.get('option_a'):
-                        options['A'] = params['option_a']
-                    if params.get('option_b'):
-                        options['B'] = params['option_b']
-                    if params.get('option_c'):
-                        options['C'] = params['option_c']
-                    if params.get('option_d'):
-                        options['D'] = params['option_d']
-                    if params.get('option_e'):
-                        options['E'] = params['option_e']
-                    if options:
-                        question_obj['options'] = options
-                
-                inserted_questions.append(question_obj)
-                
-                print(f"   ✅ Inserted question {new_id}: {params['question_text'][:50]}...")
-                
+                inserted_questions.append(question_preview)
+
+
             except Exception as e:
-                error_msg = str(e)
                 errors.append({
-                    "row": idx + 2,
-                    "question_text": str(row.get('question_text', ''))[:100] if pd.notna(row.get('question_text')) else "N/A",
-                    "error": error_msg
+                    "row": idx,
+                    "question": question.get("question_text", "N/A")[:50],
+                    "error": str(e)
                 })
-                print(f"   ⚠️  Error on row {idx + 2}: {error_msg}")
                 continue
-        
-        # Commit all inserts
-        if inserted_questions:
+
+        if inserted_count > 0:
             db.commit()
-            print(f"✅ Successfully inserted {len(inserted_questions)} questions")
+            return {
+                "success": True,
+                "message": f"File saved and {inserted_count} questions loaded successfully",
+                "file_path": str(dest_file_path),
+                "questions_loaded": inserted_count,
+                "uploaded_questions": inserted_questions,
+                "error_count": len(errors),
+                "errors": errors if errors else None
+            }
         else:
             db.rollback()
-            print(f"❌ No questions inserted")
+            return {
+                "success": False,
+                "message": "File saved but no questions were loaded. Check errors for details.",
+                "file_path": str(dest_file_path),
+                "questions_loaded": 0,
+                "uploaded_questions": [],
+                "error_count": len(errors),
+                "errors": errors
+            }
 
-        return {
-            "success": len(inserted_questions) > 0,
-            "message": f"Successfully uploaded {len(inserted_questions)} out of {len(df)} questions",
-            "file_name": file.filename,
-            "total_rows": len(df),
-            "inserted_count": len(inserted_questions),
-            "error_count": len(errors),
-            "questions": inserted_questions,  # ← Full question details for review
-            "errors": errors if errors else None
-        }
-        
+    except HTTPException:
+        raise
     except Exception as e:
         db.rollback()
-        print(f"❌ Upload failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
-    
-    
+        raise HTTPException(status_code=500, detail=f"Failed to upload questions: {str(e)}")
 
-# API #6: Version Diff
+
+# API #6: Version Diff 
+def highlight_changes(old_text: str, new_text: str) -> Dict[str, str]:
+    """Generate inline highlighted HTML showing additions and deletions"""
+    if old_text == new_text:
+        return None
+    
+    # If texts are too different (less than 30% similarity), show them separately without char-by-char diff
+    similarity = SequenceMatcher(None, old_text, new_text).ratio()
+    
+    if similarity < 0.3:  # Less than 30% similar - show full replacement
+        return {
+            "previous": f'<span style="background-color: #ffc0c0; text-decoration: line-through;">{old_text}</span>' if old_text else "",
+            "current": f'<span style="background-color: #c0ffc0; font-weight: bold;">{new_text}</span>' if new_text else "",
+            "type": "complete_change"
+        }
+    
+    # For similar texts, do word-level diff instead of character-level
+    old_words = old_text.split()
+    new_words = new_text.split()
+    
+    s = SequenceMatcher(None, old_words, new_words)
+    old_html = []
+    new_html = []
+    
+    for tag, i1, i2, j1, j2 in s.get_opcodes():
+        old_chunk = ' '.join(old_words[i1:i2])
+        new_chunk = ' '.join(new_words[j1:j2])
+        
+        if tag == 'equal':
+            old_html.append(old_chunk)
+            new_html.append(new_chunk)
+        elif tag == 'delete':
+            old_html.append(f'<span style="background-color: #ffc0c0; text-decoration: line-through;">{old_chunk}</span>')
+        elif tag == 'insert':
+            new_html.append(f'<span style="background-color: #c0ffc0; font-weight: bold;">{new_chunk}</span>')
+        elif tag == 'replace':
+            old_html.append(f'<span style="background-color: #ffc0c0; text-decoration: line-through;">{old_chunk}</span>')
+            new_html.append(f'<span style="background-color: #c0ffc0; font-weight: bold;">{new_chunk}</span>')
+        
+        # Add space between words
+        if tag != 'equal' and i2 < len(old_words):
+            old_html.append(' ')
+        if tag != 'equal' and j2 < len(new_words):
+            new_html.append(' ')
+    
+    return {
+        "previous": ''.join(old_html),
+        "current": ''.join(new_html),
+        "type": "partial_change"
+    }
+
+
+# Update your API endpoint
 @router.get("/{id}/diff/{version_id}")
 async def get_question_diff(id: int, version_id: int, db: Session = Depends(get_db)):
     """
-    Compare two versions of a question (like Git diff).
-
-    GET /api/questions/{id}/diff/{version_id}
-    - id: latest or current question ID
-    - version_id: ID of the question version to compare against
+    Compare two versions of a question and return user-friendly colored differences.
     """
+    
     # Fetch both versions
     query = text("SELECT * FROM questions WHERE question_id IN (:id, :version_id)")
     result = db.execute(query, {"id": id, "version_id": version_id}).fetchall()
@@ -778,33 +790,45 @@ async def get_question_diff(id: int, version_id: int, db: Session = Depends(get_
 
     current = dict(result[0]._mapping)
     previous = dict(result[1]._mapping)
+    
+    if current["version_number"] < previous["version_number"]:
+        current, previous = previous, current
 
-    fields_to_compare = [
-        "question_text", "option_a", "option_b", "option_c", "option_d", "option_e",
-        "correct_answer", "difficulty", "concepts"
-    ]
+    fields_to_compare = {
+        "question_text": "Question Text",
+        "option_a": "Option A",
+        "option_b": "Option B",
+        "option_c": "Option C",
+        "option_d": "Option D",
+        "option_e": "Option E",
+        "correct_answer": "Correct Answer",
+        "difficulty": "Difficulty",
+        "concepts": "Concepts"
+    }
 
-    differences = {}
-    for field in fields_to_compare:
-        old = str(previous.get(field) or "")
-        new = str(current.get(field) or "")
-        if old != new:
-            diff = "\n".join(unified_diff(
-                old.splitlines(),
-                new.splitlines(),
-                fromfile="Previous",
-                tofile="Current",
-                lineterm=""
-            ))
-            differences[field] = diff
+    differences = []
 
-    if not differences:
-        return {"success": True, "message": "No differences found — identical versions"}
+    for field, label in fields_to_compare.items():
+        old_val = str(previous.get(field) or "")
+        new_val = str(current.get(field) or "")
+        
+        if old_val != new_val:
+            diff = highlight_changes(old_val, new_val)
+            if diff:
+                differences.append({
+                    "field": label,
+                    "field_key": field,
+                    "previous": diff["previous"],
+                    "current": diff["current"],
+                    "change_type": diff.get("type", "partial_change")
+                })
 
     return {
         "success": True,
         "question_id": id,
+        "version_number": current.get("version_number"),
         "compared_to": version_id,
+        "compared_version": previous.get("version_number"),
         "differences": differences
     }
 
@@ -853,5 +877,6 @@ async def get_question_suggestions(id: int, db: Session = Depends(get_db), top_n
         "question_id": id,
         "suggested_variants": suggestions
     }
+
 
 
