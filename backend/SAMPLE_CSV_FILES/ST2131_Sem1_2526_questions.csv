@@ -1,0 +1,2 @@
+Context ID,Question Number,Sub-Question Number,Question Text,Question Type,Option A,Option B,Option C,Option D,Option E,Correct Answer,Explanation,Points,Difficulty,Concepts,Attachment
+,1,,"A group of 80 freshmen are to be randomly assigned into two classes of 30 students each, one on the first floor and one on the second floor. In how many ways can this be done?",MCQ,80C30,(80C30) / 2!,2! X (80C30),,,A,,1,Low,"Combinations (Unordered Selection), Binomial Coefficient, Combinatorics",
