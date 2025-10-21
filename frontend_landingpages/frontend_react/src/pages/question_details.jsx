@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/card';
 import { Button } from '../components/button';
 import { Badge } from '../components/badge';
@@ -14,7 +14,28 @@ import {
 } from 'lucide-react';
 
 export function QuestionDetails({ questionId = 'q-1', onBack = () => {}, onViewQuestion }) {
-  const [questionData] = useState({
+    
+    useEffect(() => {
+      const questionData = async () => {
+        try {
+          setLoading(true);
+          const response = await axios.get("http://localhost:5003/api/questions/", {
+            params: {
+              questionId: questionId
+            },
+          });
+          setQuestions(response.data.data || []);
+        } catch (error) {
+          console.error("Error fetching questions:", error);
+        } finally {
+          setLoading(false);
+        }
+      };
+  
+        questionData();
+  }, [questionId]);
+
+  {/*const [questionData] = useState({
     id: 'q-1',
     question: 'What is the time complexity of inserting an element at the beginning of a linked list?',
     type: 'Multiple Choice',
@@ -36,7 +57,7 @@ export function QuestionDetails({ questionId = 'q-1', onBack = () => {}, onViewQ
     averageScore: 72.5,
     lastUsed: '2024-01-15',
   });
-
+  
   const [usageHistory] = useState([
     {
       id: 'usage-1',
@@ -105,7 +126,7 @@ export function QuestionDetails({ questionId = 'q-1', onBack = () => {}, onViewQ
       usageCount: 156,
       tags: ['linked-list', 'doubly-linked-list', 'time-complexity'],
     },
-  ]);
+  ]);*/}
 
   const getDifficultyColor = (difficulty) => {
     switch (difficulty) {
@@ -153,7 +174,7 @@ export function QuestionDetails({ questionId = 'q-1', onBack = () => {}, onViewQ
               <div>
                 <h1 className="text-xl font-semibold">Question Details</h1>
                 <p className="text-sm text-muted-foreground">
-                  {questionData.courseCode} - {questionData.courseName}
+                  {questionData.course_code} - {questionData.course_name}
                 </p>
               </div>
             </div>
@@ -181,10 +202,6 @@ export function QuestionDetails({ questionId = 'q-1', onBack = () => {}, onViewQ
                     </Button>
                   </div>
                 </div>
-                <CardTitle>{questionData.question}</CardTitle>
-                <CardDescription>
-                  By {questionData.author} • {questionData.institution}
-                </CardDescription>
               </CardHeader>
 
               {/* ✅ Options + Correct Answer Display */}

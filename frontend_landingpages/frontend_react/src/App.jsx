@@ -4,7 +4,7 @@ import { LoginForm } from './pages/loginpage.jsx';
 import { Homepage } from './pages/homepage_dashboard.jsx';
 import { UploadCSV } from './pages/uploadcsv.jsx';
 import { QuestionLibrary } from './pages/question_library.jsx';
-import { QuestionDetails } from './pages/QuestionDetails.jsx';
+import { QuestionDetails } from './pages/question_details.jsx';
 import { QuestionCart } from './pages/question_cart.jsx'
 
 export default function App() {

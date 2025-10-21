@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../co
 import { Input } from "../components/input";
 import { Button } from "../components/button";
 import { Badge } from "../components/badge";
-import { ArrowLeft, Eye, Plus, BarChart3, GripVertical, HelpCircle } from "lucide-react";
+import { ArrowLeft, Eye, Plus, Bookmark, GripVertical, HelpCircle } from "lucide-react";
 import axios from "axios";
 
 function QuestionCard({ question, onQuestionDetails, onAddToPreview }) {
@@ -18,6 +18,8 @@ function QuestionCard({ question, onQuestionDetails, onAddToPreview }) {
         return "bg-orange-100 text-orange-800";
       case "Essay":
         return "bg-pink-100 text-pink-800";
+      case "Code":
+        return "bg-green-100 text-green-800";
       default:
         return "bg-gray-100 text-gray-800";
     }
@@ -27,20 +29,25 @@ function QuestionCard({ question, onQuestionDetails, onAddToPreview }) {
     <Card className="hover:shadow-lg transition-shadow">
       <CardHeader>
         <div className="flex justify-between items-start mb-3">
+          {/* QuestionID + Type */}
+          <div className="flex items-center space-x-1 text-sm text-muted-foreground">
+            <Bookmark className="h-4 w-4" />
+            <span>{question.question_id || 0}</span>
+          </div>
+
           <div className="flex items-center space-x-2">
             <GripVertical className="h-4 w-4 text-muted-foreground" />
             <Badge className={getTypeColor(question.question_type)}>
               {question.question_type}
             </Badge>
           </div>
-          <div className="flex items-center space-x-1 text-sm text-muted-foreground">
-            <BarChart3 className="h-4 w-4" />
-            <span>{question.usageCount || 0}</span>
-          </div>
         </div>
+
+        {/* Header Info */}
         <CardTitle className="text-lg leading-relaxed">
           {question.assessment_type || "—"}
         </CardTitle>
+
         <CardDescription>
           <span className="block font-medium text-foreground">
             {question.course_code}
@@ -50,25 +57,26 @@ function QuestionCard({ question, onQuestionDetails, onAddToPreview }) {
           </span>
         </CardDescription>
       </CardHeader>
+
       <CardContent>
         <div className="space-y-4">
+          {/* Question text */}
           <div className="text-sm text-muted-foreground line-clamp-3">
             {question.question_text}
           </div>
 
-          {question.concepts && (
+          {/* Concepts */}
+          {Array.isArray(question.concepts) && question.concepts.length > 0 && (
             <div className="flex flex-wrap gap-1">
-              {question.concepts
-                .split(",")
-                .slice(0, 3)
-                .map((tag, idx) => (
-                  <Badge key={idx} variant="secondary" className="text-xs">
-                    {tag.trim()}
-                  </Badge>
-                ))}
+              {question.concepts.slice(0, 3).map((tag, idx) => (
+                <Badge key={idx} variant="secondary" className="text-xs">
+                  {tag.trim()}
+                </Badge>
+              ))}
             </div>
           )}
 
+          {/* Buttons */}
           <div className="flex space-x-2 pt-2">
             <Button
               variant="outline"
@@ -103,16 +111,17 @@ export function QuestionLibrary({ onBack, onQuestionDetails }) {
   const [previewQuestions, setPreviewQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const difficulties = ["all", "Easy", "Medium", "Hard"];
-  const types = ["all", "MCQ", "True/False", "Short Answer", "Essay"];
+  const difficulties = ["all", "low", "med", "hard"];
+  const question_type = ["all", "Code", "T/F", "MCQ", "MRQ", "SRQ"];
 
   useEffect(() => {
     const fetchQuestions = async () => {
       try {
         setLoading(true);
-        const response = await axios.get("http://localhost:8000/api/questions/", {
+        const response = await axios.get("http://localhost:5003/api/questions/", {
           params: {
             difficulty: selectedDifficulty !== "all" ? selectedDifficulty : null,
+            question_type: selectedType !== "all" ? selectedType : null,
             subject: selectedCourse !== "all" ? selectedCourse : null,
             topic: searchTerm || null,
             is_latest: true,
@@ -190,7 +199,7 @@ return (
           value={selectedType}
           onChange={(e) => setSelectedType(e.target.value)}
         >
-          {types.map((t) => (
+          {question_type.map((t) => (
             <option key={t} value={t}>
               {t}
             </option>
@@ -205,12 +214,28 @@ return (
         >
           <option value="all">all</option>
           <option value="DSA1101">DSA1101</option>
-          <option value="CS1010">CS1010</option>
+          <option value="IND5003">IND5003</option>
+          <option value="ST1131">ST1131</option>
+          <option value="ST2131">ST2131</option>
+          <option value="ST2137">ST2137</option>
         </select>
       </div>
 
       {/* Question list */}
       <div className="p-6">
+        {/* Dynamic header */}
+        {!loading && questions.length > 0 && (
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-lg font-semibold">
+              Showing {questions.length} question{questions.length !== 1 ? "s" : ""}...
+            </h2>
+            {searchTerm && (
+              <p className="text-sm text-muted-foreground">
+                Results for "<span className="font-medium">{searchTerm}</span>"
+              </p>
+            )}
+          </div>
+        )}
         {loading ? (
           <p>Loading questions...</p>
         ) : !questions || questions.length === 0 ? (

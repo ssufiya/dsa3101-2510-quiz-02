@@ -3,12 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-<<<<<<< HEAD
-  "proxy": "http://localhost:5000",
-=======
   "proxy": "http://localhost:5002",
-
->>>>>>> edc06d74668993aa325949c5a05879c9ca78522f
   "scripts": {
     "dev": "vite",
     "build": "vite build",
