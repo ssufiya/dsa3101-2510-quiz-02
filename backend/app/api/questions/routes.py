@@ -28,6 +28,7 @@ async def get_questions(
     id: Optional[int] = Query(None, description="Filter by question ID"),
     subject: Optional[str] = Query(None, description="Filter by subject/course"),
     difficulty: Optional[str] = Query(None, description="Filter by difficulty"),
+    type: Optional[str] = Query(None, description="Filter by question type"),
     semester: Optional[str] = Query(None, description="Filter by semester"),
     topic: Optional[str] = Query(None, description="Filter by one or more topics"),
     match: Optional[str] = Query("all", description="Match mode: 'any' (OR) or 'all' (AND) across all filters"),
@@ -83,6 +84,11 @@ async def get_questions(
         if difficulty is not None:
             conditions.append("q.difficulty = :difficulty")
             params["difficulty"] = difficulty
+
+        # --- Question Type Filter ---
+        if type is not None:
+            conditions.append("q.question_type =:question_type")
+            params["question_type"] = type
 
         # --- Semester Filter ---
         if semester is not None:
@@ -275,7 +281,6 @@ async def get_question_by_id(id: int, db: Session = Depends(get_db)):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
-
 
 
 # API #3: Fetching ALL Versions
@@ -605,6 +610,7 @@ async def upload_new_questions(
 
         # ===== STEP 3: INSERT QUESTIONS =====
         inserted_count = 0
+        inserted_questions = []
         errors = []
 
         for idx, question in enumerate(questions_data, 1):
@@ -652,6 +658,32 @@ async def upload_new_questions(
                 db.execute(text(query), params)
                 inserted_count += 1
 
+                # ← Store the inserted question details for preview
+                question_preview = {
+                    "question_text": question.get("question_text"),
+                    "question_type": question.get("question_type"),
+                    "difficulty": question.get("difficulty"),
+                    "concepts": question.get("concepts"),
+                    "correct_answer": question.get("correct_answer"),
+                    "option_a": question.get("option_a"),
+                    "option_b": question.get("option_b"),
+                    "option_c": question.get("option_c"),
+                    "option_d": question.get("option_d"),
+                    "option_e": question.get("option_e"),
+                    "explanation": question.get("explanation"),
+                    "points": question.get("points"),
+                    "question_number": question.get("question_number"),
+                    "sub_question_number": question.get("sub_question_number")
+                }
+                # Replace NaN with None for JSON serialization
+                import math
+                question_preview = {
+                    k: (None if isinstance(v, float) and math.isnan(v) else v)
+                    for k, v in question_preview.items()
+                }
+                inserted_questions.append(question_preview)
+
+
             except Exception as e:
                 errors.append({
                     "row": idx,
@@ -667,6 +699,7 @@ async def upload_new_questions(
                 "message": f"File saved and {inserted_count} questions loaded successfully",
                 "file_path": str(dest_file_path),
                 "questions_loaded": inserted_count,
+                "uploaded_questions": inserted_questions,
                 "error_count": len(errors),
                 "errors": errors if errors else None
             }
@@ -677,6 +710,7 @@ async def upload_new_questions(
                 "message": "File saved but no questions were loaded. Check errors for details.",
                 "file_path": str(dest_file_path),
                 "questions_loaded": 0,
+                "uploaded_questions": [],
                 "error_count": len(errors),
                 "errors": errors
             }
