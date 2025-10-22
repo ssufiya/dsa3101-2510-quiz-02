@@ -7,6 +7,8 @@ export default defineConfig({
   server: {
     proxy: {
       '/upload': 'http://localhost:5003',
+      'api/questions/upload': 'http://localhost:5003',
+      'api/questions/': 'http://localhost:5003'
     },
   },
 })

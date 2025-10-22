@@ -4,16 +4,18 @@ import { LoginForm } from './pages/loginpage.jsx';
 import { Homepage } from './pages/homepage_dashboard.jsx';
 import { UploadCSV } from './pages/uploadcsv.jsx';
 import { QuestionLibrary } from './pages/question_library.jsx';
-import { QuestionDetails } from './pages/QuestionDetails.jsx';
-import { QuestionCart } from './pages/question_cart.jsx'
+import { QuestionDetails } from './pages/question_details.jsx';
+import { QuestionCart } from './pages/question_cart.jsx';
+import { EditQuestion } from './pages/edit_question.jsx';
 
 export default function App() {
-  const [currentScreen, setCurrentScreen] = useState("login"); // "login", "dashboard", "upload"
+  const [currentScreen, setCurrentScreen] = useState("login"); // "login", "dashboard", "upload", etc.
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [selectedQuestionId, setSelectedQuestionId] = useState(null);
+  const [cartQuestions, setCartQuestions] = useState([]);
+  const [questionLibraryData, setQuestionLibraryData] = useState([]); // store question data globally
 
-
-
+  // ---------- Navigation Handlers ----------
   const handleLogin = () => {
     setIsLoggedIn(true);
     setCurrentScreen("dashboard");
@@ -28,39 +30,98 @@ export default function App() {
   const goToDashboard = () => setCurrentScreen("dashboard");
   const goToQuestionLibrary = () => setCurrentScreen("questionlibrary");
   const goToQuestionDetails = (questionId) => {
-    setSelectedQuestionId(questionId);  // remember which question was clicked
-    setCurrentScreen("questiondetails"); // navigate to details page
+    setSelectedQuestionId(questionId);
+    setCurrentScreen("questiondetails");
   };
   const goToQuestionCart = () => setCurrentScreen("questioncart");
+  const goToEditQuestion = (questionId) => {
+    setSelectedQuestionId(questionId);
+    setCurrentScreen("editquestion");
+  };
 
+  // ---------- Cart Handlers ----------
+  const addToCart = (question) => {
+    if (!cartQuestions.find((q) => q.question_id === question.question_id)) {
+      setCartQuestions((prev) => [...prev, question]);
+    }
+  };
 
-  if (!isLoggedIn) {
-    return <LoginForm onLogin={handleLogin} />;
-  }
+  const removeFromCart = (questionId) => {
+    setCartQuestions((prev) => prev.filter((q) => q.question_id !== questionId));
+  };
+
+  // ---------- Update question after edit ----------
+  const handleSaveQuestion = (updatedQuestion) => {
+    setQuestionLibraryData((prev) =>
+      prev.map((q) => (q.id === updatedQuestion.id ? updatedQuestion : q))
+    );
+  };
+
+  // ---------- Render Screens ----------
+  if (!isLoggedIn) return <LoginForm onLogin={handleLogin} />;
 
   if (currentScreen === "dashboard") {
-    return <Homepage onLogout={handleLogout} onGoToUpload={goToUpload} onGoToQuestionLibrary={goToQuestionLibrary} onGoToQuestionCart={goToQuestionCart}/>;
+    return (
+      <Homepage
+        onLogout={handleLogout}
+        onGoToUpload={goToUpload}
+        onGoToQuestionLibrary={goToQuestionLibrary}
+        onGoToQuestionCart={goToQuestionCart}
+      />
+    );
   }
 
-  if (currentScreen === "upload") {
-    return <UploadCSV onBack={goToDashboard}/>;
-  }
+  if (currentScreen === "upload") return <UploadCSV onBack={goToDashboard} />;
 
   if (currentScreen === "questionlibrary") {
-    return <QuestionLibrary onBack={goToDashboard} onQuestionDetails={goToQuestionDetails}/>;
+    return (
+      <QuestionLibrary
+        onBack={goToDashboard}
+        onQuestionDetails={goToQuestionDetails}
+        questionData={questionLibraryData}
+      />
+    );
   }
 
   if (currentScreen === "questiondetails") {
-  return <QuestionDetails
-      questionId={selectedQuestionId}   //
-      onBack={goToQuestionLibrary}
-    />;
+    const question = questionLibraryData.find((q) => q.id === selectedQuestionId);
+    return (
+      <QuestionDetails
+        questionId={selectedQuestionId}
+        questionData={question}
+        onBack={goToQuestionLibrary}
+        onEditQuestion={goToEditQuestion}
+        onViewQuestion={goToQuestionDetails}
+        onGoToQuestionCart={goToQuestionCart}
+        onAddToCart={addToCart}
+        cartQuestions={cartQuestions}
+      />
+    );
+  }
+
+  if (currentScreen === "editquestion") {
+    const question = questionLibraryData.find((q) => q.id === selectedQuestionId);
+    return (
+      <EditQuestion
+        questionId={selectedQuestionId}
+        questionData={question}
+        onBack={() => goToQuestionDetails(selectedQuestionId)}
+        onSave={handleSaveQuestion}
+      />
+    );
   }
 
   if (currentScreen === "questioncart") {
-    return <QuestionCart onBack={goToDashboard} onQuestionCart={goToQuestionCart}/>;
+    return (
+      <QuestionCart
+        onBack={goToDashboard}
+        onBackToLibrary={goToQuestionLibrary}
+        onBackToDetails={() => goToQuestionDetails(selectedQuestionId)}
+        questions={cartQuestions}
+        onRemoveQuestion={removeFromCart}
+      />
+    );
   }
 
-  // fallback
   return null;
 }
