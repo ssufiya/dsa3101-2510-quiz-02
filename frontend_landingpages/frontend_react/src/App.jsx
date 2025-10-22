@@ -79,6 +79,9 @@ export default function App() {
         onBack={goToDashboard}
         onQuestionDetails={goToQuestionDetails}
         questionData={questionLibraryData}
+        onGoToQuestionCart={goToQuestionCart}
+        onAddToCart={addToCart}
+        cartQuestions={cartQuestions}
       />
     );
   }
