@@ -6,7 +6,9 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      '/upload': 'http://localhost:5002',
+      'api/questions/upload': 'http://localhost:5003',
+      'api/questions/': 'http://localhost:5003'
+
     },
   },
 })

@@ -1,15 +1,15 @@
-import { useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle,} from "../components/card";
+import { useState, useEffect } from "react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/card";
 import { Input } from "../components/input";
 import { Button } from "../components/button";
 import { Badge } from "../components/badge";
-import { ArrowLeft, Eye, Plus, X, FileText, BarChart3, GripVertical, HelpCircle,} from "lucide-react";
-import { ScrollArea } from "../components/scrollarea";
+import { ArrowLeft, Eye, Plus, Bookmark, GripVertical, HelpCircle } from "lucide-react";
+import axios from "axios";
 
-// Question card component
 function QuestionCard({ question, onQuestionDetails, onAddToPreview }) {
   const getTypeColor = (type) => {
     switch (type) {
+      case "MCQ":
       case "Multiple Choice":
         return "bg-blue-100 text-blue-800";
       case "True/False":
@@ -18,6 +18,8 @@ function QuestionCard({ question, onQuestionDetails, onAddToPreview }) {
         return "bg-orange-100 text-orange-800";
       case "Essay":
         return "bg-pink-100 text-pink-800";
+      case "Code":
+        return "bg-green-100 text-green-800";
       default:
         return "bg-gray-100 text-gray-800";
     }
@@ -27,58 +29,60 @@ function QuestionCard({ question, onQuestionDetails, onAddToPreview }) {
     <Card className="hover:shadow-lg transition-shadow">
       <CardHeader>
         <div className="flex justify-between items-start mb-3">
+          {/* QuestionID + Type */}
+          <div className="flex items-center space-x-1 text-sm text-muted-foreground">
+            <Bookmark className="h-4 w-4" />
+            <span>{question.question_id || 0}</span>
+          </div>
+
           <div className="flex items-center space-x-2">
             <GripVertical className="h-4 w-4 text-muted-foreground" />
-            <Badge className={getTypeColor(question.type)}>
-              {question.type}
+            <Badge className={getTypeColor(question.question_type)}>
+              {question.question_type}
             </Badge>
           </div>
-          <div className="flex items-center space-x-1 text-sm text-muted-foreground">
-            <BarChart3 className="h-4 w-4" />
-            <span>{question.usageCount}</span>
-          </div>
         </div>
+
+        {/* Header Info */}
         <CardTitle className="text-lg leading-relaxed">
-          {question.academicYear} {question.examType}
+          {question.assessment_type || "—"}
         </CardTitle>
+
         <CardDescription>
           <span className="block font-medium text-foreground">
-            {question.courseCode} - {question.courseName}
+            {question.course_code}
           </span>
-          <span className="block text-sm">
-            {question.author} • {question.institution}
+          <span className="block text-sm text-muted-foreground">
+            Difficulty: {question.difficulty}
           </span>
         </CardDescription>
       </CardHeader>
+
       <CardContent>
         <div className="space-y-4">
+          {/* Question text */}
           <div className="text-sm text-muted-foreground line-clamp-3">
-            {question.question}
+            {question.question_text}
           </div>
 
-          <div className="text-sm text-muted-foreground">
-            Subject: {question.subject}
-          </div>
+          {/* Concepts */}
+          {Array.isArray(question.concepts) && question.concepts.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {question.concepts.slice(0, 3).map((tag, idx) => (
+                <Badge key={idx} variant="secondary" className="text-xs">
+                  {tag.trim()}
+                </Badge>
+              ))}
+            </div>
+          )}
 
-          <div className="flex flex-wrap gap-1">
-            {question.tags.slice(0, 3).map((tag) => (
-              <Badge key={tag} variant="secondary" className="text-xs">
-                {tag}
-              </Badge>
-            ))}
-            {question.tags.length > 3 && (
-              <Badge variant="secondary" className="text-xs">
-                +{question.tags.length - 3}
-              </Badge>
-            )}
-          </div>
-
+          {/* Buttons */}
           <div className="flex space-x-2 pt-2">
             <Button
               variant="outline"
               size="sm"
               className="flex-1"
-              onClick={() => onQuestionDetails(question.id)}
+              onClick={() => onQuestionDetails(question.question_id)}
             >
               <Eye className="h-4 w-4 mr-1" />
               View Details
@@ -86,7 +90,7 @@ function QuestionCard({ question, onQuestionDetails, onAddToPreview }) {
             <Button
               size="sm"
               className="flex-1"
-              onClick={() => onAddToPreview(question.id)}
+              onClick={() => onAddToPreview(question.question_id)}
             >
               <Plus className="h-4 w-4 mr-1" />
               Add to Preview
@@ -98,195 +102,160 @@ function QuestionCard({ question, onQuestionDetails, onAddToPreview }) {
   );
 }
 
-
 export function QuestionLibrary({ onBack, onQuestionDetails }) {
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedSubject, setSelectedSubject] = useState("all");
   const [selectedDifficulty, setSelectedDifficulty] = useState("all");
   const [selectedCourse, setSelectedCourse] = useState("all");
   const [selectedType, setSelectedType] = useState("all");
+  const [questions, setQuestions] = useState([]);
   const [previewQuestions, setPreviewQuestions] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const [libraryQuestions] = useState([
-    {
-      id: 1,
-      academicYear: "2024",
-      examType: "Midterm",
-      courseCode: "CS1010",
-      courseName: "Programming Methodology",
-      author: "Dr. Tan",
-      institution: "NUS",
-      question:
-        "Explain the difference between pass-by-value and pass-by-reference.",
-      subject: "Computer Science",
-      difficulty: "Medium",
-      usageCount: 10,
-      type: "Short Answer",
-      tags: ["functions", "parameters", "C"],
-    },
-    {
-      id: 2,
-      academicYear: "2023",
-      examType: "Final",
-      courseCode: "MA1101R",
-      courseName: "Linear Algebra I",
-      author: "Prof. Lim",
-      institution: "NUS",
-      question: "State and prove the Rank-Nullity Theorem.",
-      subject: "Mathematics",
-      difficulty: "Hard",
-      usageCount: 5,
-      type: "Essay",
-      tags: ["theorem", "proof", "linear algebra"],
-    },
-  ]);
+  const difficulties = ["all", "low", "med", "hard"];
+  const question_type = ["all", "Code", "T/F", "MCQ", "MRQ", "SRQ"];
 
-  const subjects = ["all", "Computer Science", "Mathematics"];
-  const difficulties = ["all", "Easy", "Medium", "Hard"];
-  const courses = [
-    "all",
-    "CS1010 - Programming Methodology",
-    "MA1101R - Linear Algebra I",
-  ];
-  const types = ["all", "Multiple Choice", "True/False", "Short Answer", "Essay"];
+  useEffect(() => {
+    const fetchQuestions = async () => {
+      try {
+        setLoading(true);
+        const response = await axios.get("http://localhost:5003/api/questions/", {
+          params: {
+            difficulty: selectedDifficulty !== "all" ? selectedDifficulty : null,
+            question_type: selectedType !== "all" ? selectedType : null,
+            subject: selectedCourse !== "all" ? selectedCourse : null,
+            topic: searchTerm || null,
+            is_latest: true,
+          },
+        });
+        setQuestions(response.data.data || []);
+      } catch (error) {
+        console.error("Error fetching questions:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+      fetchQuestions();
+}, [selectedDifficulty, selectedType, selectedCourse, searchTerm]);
 
   const addToPreview = (questionId) => {
-    const question = libraryQuestions.find((q) => q.id === questionId);
-    if (question && !previewQuestions.find((q) => q.id === questionId)) {
+    const question = questions.find((q) => q.question_id === questionId);
+    if (question && !previewQuestions.find((q) => q.question_id === questionId)) {
       setPreviewQuestions((prev) => [...prev, question]);
     }
   };
 
-  const removeFromPreview = (id) =>
-    setPreviewQuestions((prev) => prev.filter((q) => q.id !== id));
-
-  const clearPreview = () => setPreviewQuestions([]);
-
-  const filteredQuestions = libraryQuestions.filter((q) => {
-    const matchesSearch =
-      q.question.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      q.courseName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      q.courseCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      q.author.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      q.tags.some((t) => t.toLowerCase().includes(searchTerm.toLowerCase()));
-
-    const matchesSubject =
-      selectedSubject === "all" || q.subject === selectedSubject;
-    const matchesDifficulty =
-      selectedDifficulty === "all" || q.difficulty === selectedDifficulty;
-    const matchesCourse =
-      selectedCourse === "all" ||
-      `${q.courseCode} - ${q.courseName}` === selectedCourse;
-    const matchesType = selectedType === "all" || q.type === selectedType;
-
-    return (
-      matchesSearch &&
-      matchesSubject &&
-      matchesDifficulty &&
-      matchesCourse &&
-      matchesType
-    );
-  });
-
-  return (
-    <div className="min-h-screen bg-gray-50 flex">
-      {/* Main Section */}
-      <div className="flex-1 flex flex-col">
-        <header className="bg-white border-b border-gray-200">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center h-16 space-x-4">
-              <Button variant="ghost" onClick={onBack}>
-                <ArrowLeft className="h-4 w-4" />
-                <span>Back to Dashboard</span>
-              </Button>
-              <div className="h-6 w-px bg-gray-300"></div>
-              <div className="flex items-center space-x-3">
-                <div className="bg-primary rounded-lg p-2">
-                  <HelpCircle className="h-6 w-6 text-primary-foreground" />
-                </div>
-                <div>
-                  <h1 className="text-xl font-semibold">Question Library</h1>
-                  <p className="text-sm text-muted-foreground">
-                    Browse questions from other professors
-                  </p>
-                </div>
+return (
+  <div className="min-h-screen bg-gray-50 flex">
+    {/* Main Section */}
+    <div className="flex-1 flex flex-col">
+      {/* Header */}
+      <header className="bg-white border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center h-16 space-x-4">
+            <Button variant="ghost" onClick={onBack}>
+              <ArrowLeft className="h-4 w-4" />
+              <span>Back to Dashboard</span>
+            </Button>
+            <div className="h-6 w-px bg-gray-300"></div>
+            <div className="flex items-center space-x-3">
+              <div className="bg-primary rounded-lg p-2">
+                <HelpCircle className="h-6 w-6 text-primary-foreground" />
+              </div>
+              <div>
+                <h1 className="text-xl font-semibold">Question Library</h1>
+                <p className="text-sm text-muted-foreground">
+                  Browse questions from the database
+                </p>
               </div>
             </div>
           </div>
-        </header>
-
-        {/* Filters */}
-        <div className="bg-white border-b border-gray-200 px-6 py-4 flex flex-wrap gap-4">
-          <Input
-            placeholder="Search by keyword..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-64"
-          />
-          <select
-            className="border border-gray-300 rounded-md px-2 py-1"
-            value={selectedSubject}
-            onChange={(e) => setSelectedSubject(e.target.value)}
-          >
-            {subjects.map((sub) => (
-              <option key={sub} value={sub}>
-                {sub}
-              </option>
-            ))}
-          </select>
-          <select
-            className="border border-gray-300 rounded-md px-2 py-1"
-            value={selectedDifficulty}
-            onChange={(e) => setSelectedDifficulty(e.target.value)}
-          >
-            {difficulties.map((dif) => (
-              <option key={dif} value={dif}>
-                {dif}
-              </option>
-            ))}
-          </select>
-          <select
-            className="border border-gray-300 rounded-md px-2 py-1"
-            value={selectedCourse}
-            onChange={(e) => setSelectedCourse(e.target.value)}
-          >
-            {courses.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-          <select
-            className="border border-gray-300 rounded-md px-2 py-1"
-            value={selectedType}
-            onChange={(e) => setSelectedType(e.target.value)}
-          >
-            {types.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
         </div>
+      </header>
 
-        {/* Question list */}
-        <div className="p-6 grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-          {filteredQuestions.map((q) => (
-            <QuestionCard
-              key={q.id}
-              question={q}
-              onQuestionDetails={onQuestionDetails}
-              onAddToPreview={addToPreview}
-            />
+      {/* Filters */}
+      <div className="bg-white border-b border-gray-200 px-6 py-4 flex flex-wrap gap-4">
+        <Input
+          placeholder="Search by keyword..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="w-64"
+        />
+
+        <select
+          className="border border-gray-300 rounded-md px-2 py-1"
+          value={selectedDifficulty}
+          onChange={(e) => setSelectedDifficulty(e.target.value)}
+        >
+          {difficulties.map((dif) => (
+            <option key={dif} value={dif}>
+              {dif}
+            </option>
           ))}
-        </div>
+        </select>
+
+        <select
+          className="border border-gray-300 rounded-md px-2 py-1"
+          value={selectedType}
+          onChange={(e) => setSelectedType(e.target.value)}
+        >
+          {question_type.map((t) => (
+            <option key={t} value={t}>
+              {t}
+            </option>
+          ))}
+        </select>
+
+        {/* Example static course list — can be replaced with /courses API */}
+        <select
+          className="border border-gray-300 rounded-md px-2 py-1"
+          value={selectedCourse}
+          onChange={(e) => setSelectedCourse(e.target.value)}
+        >
+          <option value="all">all</option>
+          <option value="DSA1101">DSA1101</option>
+          <option value="IND5003">IND5003</option>
+          <option value="ST1131">ST1131</option>
+          <option value="ST2131">ST2131</option>
+          <option value="ST2137">ST2137</option>
+        </select>
       </div>
 
-      {/* <PreviewArea
-        previewQuestions={previewQuestions}
-        onRemoveFromPreview={removeFromPreview}
-        onClearPreview={clearPreview}
-      /> */}
+      {/* Question list */}
+      <div className="p-6">
+        {/* Dynamic header */}
+        {!loading && questions.length > 0 && (
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-lg font-semibold">
+              Showing {questions.length} question{questions.length !== 1 ? "s" : ""}...
+            </h2>
+            {searchTerm && (
+              <p className="text-sm text-muted-foreground">
+                Results for "<span className="font-medium">{searchTerm}</span>"
+              </p>
+            )}
+          </div>
+        )}
+        {loading ? (
+          <p>Loading questions...</p>
+        ) : !questions || questions.length === 0 ? (
+          <div className="text-center text-gray-500 mt-10">
+            <p>No questions found.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {questions.map((q) => (
+              <QuestionCard
+                key={q.question_id}
+                question={q}
+                onQuestionDetails={onQuestionDetails}
+                onAddToPreview={addToPreview}
+              />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
-  );
+  </div>
+);
 }
