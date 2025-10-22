@@ -6,9 +6,13 @@ import { Progress } from '../components/progress';
 import { Alert, AlertDescription } from '../components/alert';
 import { 
   ArrowLeft, Upload, FileText, CheckCircle, AlertCircle, 
-  Download, Trash2
+  Download, Trash2, Save
 } from 'lucide-react';
 import axios from 'axios';
+import { Label } from "../components/label";
+import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "../components/select";
+import { Input } from "../components/input";
+import Papa from "papaparse";
 
 //creates internal variable for the component instance
 
@@ -17,6 +21,12 @@ export function UploadCSV({ onBack }) {
   const [uploadStatus, setUploadStatus] = useState({ status: "idle" });
   const [uploadedQuestions, setUploadedQuestions] = useState([]);
   const fileInputRef = useRef(null);
+
+  //manual inputs 
+  const [courseCode, setCourseCode] = useState("");
+  const [assessmentType, setAssessmentType] = useState("");
+  const [assessmentYear, setAssessmentYear] = useState("");
+  const [assessmentSemester, setAssessmentSemester] = useState("");
 
   const getDifficultyColor = (difficulty) => {
     switch (difficulty) {
@@ -31,101 +41,100 @@ export function UploadCSV({ onBack }) {
     }
   };
   
-  const handleFileUpload = async (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  //pre-parser to display question preview before passing to backend
+const handleFileUpload = (event) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
 
-    //error if not csv file
-    if (!file.name.toLowerCase().endsWith(".csv") && !file.name.toLowerCase().endsWith(".zip")) {
-      setUploadStatus({
-        status: "error",
-        message: "Please upload a CSV or ZIP file only.",
-      });
-      return;
-    }
-
-    setUploadStatus({ status: "uploading", progress: 0 });
-
-    try {
-    // Build FormData to send to backend
-    const formData = new FormData();
-    formData.append("file", file);
-
-    ///
-
-    // Send request to your backend
-    const response = await axios.post("/upload", formData, {
-      headers: {
-        "Content-Type": "multipart/form-data",
-      },
-      onUploadProgress: (progressEvent) => {
-        const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-        setUploadStatus({ status: "uploading", progress });
-      },
-    });
-    //check if progressEvent.Total is provided in the browser
-
-    const data = response.data;
-    setUploadStatus({
-      status: "success",
-      message: data.message || "File uploaded successfully!",
-      progress: 100,
-    });
-
-    // show how many questions addedd
-    if (data.questions_added) {
-      setUploadedQuestions((prev) => [
-        ...prev,
-        { id: `upload-${Date.now()}`, text: `${data.questions_added} questions added` },
-      ]);
-    }
-
-    setTimeout(() => {
-      setUploadStatus({ status: "idle" });
-    }, 3000);
-
-    //handle error
-  } catch (error) {
-    console.error("Upload error:", error);
-    const message =
-      error.response?.data?.error ||
-      error.message ||
-      "Error uploading file. Please try again.";
-
-    setUploadStatus({
-      status: "error",
-      message,
-    });
+  if (!file.name.toLowerCase().endsWith(".csv")) {
+    setUploadStatus({ status: "error", message: "Only CSV files allowed" });
+    return;
   }
-  
-   if (fileInputRef.current) {
-    fileInputRef.current.value = "";
+
+  setUploadStatus({ status: "parsing", progress: 0 });
+
+  Papa.parse(file, {
+    header: true,
+    skipEmptyLines: true,
+    complete: (results) => {
+      const questions = results.data.map((row, idx) => {
+        const options = [
+          row["Option A"],
+          row["Option B"],
+          row["Option C"],
+          row["Option D"],
+          row["Option E"],
+        ].filter((o) => o && o.trim() !== "");
+
+        return {
+          id: `preview-${idx + 1}`, // temporary id
+          question_text: row["Question Text"] || "",
+          question_type: row["Question Type"] || "MCQ",
+          options,
+          answer: row["Correct Answer"] || "",
+          difficulty: row["Difficulty"] || "",
+          concepts: row["Concepts"] || "",
+          marks: row["Points"] || 1,
+          course_id: row["Course ID"] || "",
+          assessment_id: row["Assessment ID"] || "",
+          explanation: row["Explanation"] || "",
+        };
+      });
+
+      setUploadedQuestions(questions);
+      setUploadStatus({ status: "success", message: `${questions.length} questions parsed` });
+    },
+    error: (err) => {
+      setUploadStatus({ status: "error", message: err.message });
+    },
+  });
+};
+
+//once questions are confirmed, questions will be sent to backend
+const handleSaveQuestions = async () => {
+  try {
+    setUploadStatus({ status: "saving", progress: 0 });
+
+    const response = await axios.post(
+      "http://localhost:5001/api/questions/upload",
+      { questions: uploadedQuestions },
+    );
+
+    if (response.data.success) {
+      setUploadStatus({ status: "success", message: response.data.message });
+      setUploadedQuestions([]); // clear preview after save
+    }
+  } catch (err) {
+    setUploadStatus({ status: "error", message: err.message });
   }
 };
 
 //sample csv file 
   const downloadSampleCSV = () => {
-    const sampleData = [
-      "question,option_a,option_b,option_c,option_d,correct_answer,difficulty,course_name,course_code,type,tags",
-      '"What is the capital of France?","Paris","London","Berlin","Madrid",0,Easy,"Introduction to Geography","GEOG101","Multiple Choice","geography;europe"',
-      '"Python is a programming language","True","False","","",0,Easy,"Computer Science Fundamentals","CS101","True/False","programming;python"',
-      '"What is 2 + 2?","3","4","5","6",1,Easy,"Basic Mathematics","MATH101","Multiple Choice","arithmetic;basics"',
-    ].join("\n");
+  const sampleData = [
+    // Headers: required first, then optional
+    "question_text,question_type,difficulty,concepts,course_id,assessment_id,option_a,option_b,option_c,option_d,option_e,correct_answer",
+    
+    // Sample rows
+    '"What is the capital of France?","MCQ","Easy","Geography",1,1,"Paris","London","Berlin","Madrid","","Paris"',
+    '"Python is a programming language","Open-ended","Easy","Programming",2,1,"","","","","",""',
+    '"What is 2 + 2?","MCQ","Easy","Math",3,1,"3","4","5","6","","4"',
+  ].join("\n");
 
-    const blob = new Blob([sampleData], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "sample_questions.csv";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
+  const blob = new Blob([sampleData], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "sample_questions.csv";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};
 
-  const removeQuestion = (questionId) => {
-    setUploadedQuestions((prev) => prev.filter((q) => q.id !== questionId));
-  };
+const removeQuestion = (questionId) => {
+  setUploadedQuestions((prev) => prev.filter((q) => q.id !== questionId));
+};
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -147,7 +156,78 @@ export function UploadCSV({ onBack }) {
         </div>
       </header>
 
+    {/* main content wrapper */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+       
+        {/* Manual Input Fields Section */}
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle>Assessment Information</CardTitle>
+            <CardDescription>
+              Enter the course and assessment details that will be applied to all uploaded questions
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="courseCode">Course Code *</Label>
+                <Input
+                  id="courseCode"
+                  placeholder="e.g., CS201"
+                  value={courseCode}
+                  onChange={(e) => setCourseCode(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="assessmentType">Assessment Type *</Label>
+                <Select value={assessmentType} onValueChange={setAssessmentType}>
+                  <SelectTrigger id="assessmentType">
+                    <SelectValue placeholder="Select assessment type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Final">Final Exam</SelectItem>
+                    <SelectItem value="Midterm">Midterm Exam</SelectItem>
+                    <SelectItem value="Quiz">Quiz</SelectItem>
+                    <SelectItem value="Assignment">Assignment</SelectItem>
+                    <SelectItem value="Practice">Practice Test</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="assessmentYear">Assessment Year *</Label>
+                <Input
+                  id="assessmentYear"
+                  placeholder="e.g., AY23/24 or 2024"
+                  value={assessmentYear}
+                  onChange={(e) => setAssessmentYear(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="assessmentSemester">Assessment Semester *</Label>
+                <Select value={assessmentSemester} onValueChange={setAssessmentSemester}>
+                  <SelectTrigger id="assessmentSemester">
+                    <SelectValue placeholder="Select semester" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white text-black" position="popper">
+                    <SelectItem value="Semester 1">Semester 1</SelectItem>
+                    <SelectItem value="Semester 2">Semester 2</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            
+            <Alert className="mt-4">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                These fields are required and will be automatically applied to all questions uploaded from the CSV file.
+              </AlertDescription>
+            </Alert>
+          </CardContent>
+        </Card>
+
         {/* CSV Upload Section */}
         <Card className="mb-8">
           <CardHeader>
@@ -227,10 +307,9 @@ export function UploadCSV({ onBack }) {
             <div className="text-xs text-muted-foreground bg-muted p-3 rounded">
               <strong>CSV Format Requirements:</strong>
               <br />
-              Required columns: question, option_a, option_b, option_c, option_d, correct_answer (0-3),
-              difficulty (Easy/Medium/Hard), course_name, course_code, type (Multiple Choice/True/False/Short Answer)
+              Required columns: question_text, question_type(MCQ, Open-Ended etc.), difficulty, concepts, course_id, assessment_id
               <br />
-              Optional: tags (semicolon-separated)
+              Optional: MCQ Options (Option A, Option B...) , Answer
             </div>
           </CardContent>
         </Card>
@@ -287,115 +366,243 @@ export function UploadCSV({ onBack }) {
 
         {/*question preview for more details*/}
 
-        {/*{uploadedQuestions.length > 0 && (
+     {/* Question Preview Section */}
+        {uploadedQuestions.length > 0 && (
           <Card>
             <CardHeader>
               <div className="flex justify-between items-center">
                 <div>
-                  <CardTitle>Uploaded Questions Preview</CardTitle>
+                  <CardTitle>
+                    Uploaded Questions Preview
+                  </CardTitle>
                   <CardDescription>
-                    Review and manage your uploaded questions before using them in quizzes
+                    Review and manage your uploaded questions
+                    before using them in quizzes
                   </CardDescription>
                 </div>
-                <Badge variant="secondary">{uploadedQuestions.length} Questions</Badge>
+                <Badge variant="secondary">
+                  {uploadedQuestions.length} Questions
+                </Badge>
               </div>
+              
+              {/* Assessment Information Summary */}
+              {(courseCode || assessmentType || assessmentYear || assessmentSemester) && (
+                <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <h4 className="text-sm mb-2 text-blue-900">Applied Assessment Information:</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {courseCode && (
+                      <Badge variant="secondary">Course: {courseCode}</Badge>
+                    )}
+                    {assessmentType && (
+                      <Badge variant="secondary">Type: {assessmentType}</Badge>
+                    )}
+                    {assessmentYear && (
+                      <Badge variant="secondary">Year: {assessmentYear}</Badge>
+                    )}
+                    {assessmentSemester && (
+                      <Badge variant="secondary">Semester: {assessmentSemester}</Badge>
+                    )}
+                  </div>
+                </div>
+              )}
             </CardHeader>
             <CardContent>
+
+              {/* Questions List */}
               <div className="space-y-4">
-                {uploadedQuestions.map((question) => (
-                  <Card key={question.id} className="border-l-4 border-l-blue-500">
+                {uploadedQuestions.map((question, qIndex) => (
+                  <Card
+                    key={question.id}
+                    className="border-l-4 border-l-blue-500"
+                  >
                     <CardHeader className="pb-3">
-                      <div className="flex justify-between items-start">
+                      <div className="flex justify-between items-start gap-4">
                         <div className="flex-1">
-                          <CardTitle className="text-base">{question.text}</CardTitle>
-                          <CardDescription className="mt-1">
-                            {question.courseCode} - {question.courseName}
-                          </CardDescription>
+                          <div className="flex items-start gap-2 mb-2">
+                            <Badge variant="outline" className="text-xs">
+                              Q{qIndex + 1}
+                            </Badge>
+                            <Badge variant="secondary">
+                              {question.question_type}
+                            </Badge>
+                          </div>
+                          <CardTitle className="text-base leading-relaxed">
+                            {question.question_text}
+                          </CardTitle>
                         </div>
-                        <div className="flex items-center space-x-2">
-                          <Badge className={getDifficultyColor(question.difficulty)}>
-                            {question.difficulty}
-                          </Badge>
-                          <Badge variant="outline">{question.type}</Badge>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => removeQuestion(question.id)}
-                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            removeQuestion(question.id)
+                          }
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50 flex-shrink-0"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
                     </CardHeader>
-                    <CardContent className="pt-0">
-                      {question.type === "Multiple Choice" && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                          {question.options.map((option, index) => (
+                    <CardContent className="pt-0 space-y-4">
+                      {/* Options for MCQ */}
+                      {question.question_type === "MCQ" && question.options && question.options.length > 0 && (
+                        <div>
+                          <h4 className="text-sm mb-2 text-muted-foreground">Options:</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            {question.options.map(
+                              (option, index) => (
+                                <div
+                                  key={index}
+                                  className={`p-3 rounded text-sm border ${
+                                    question.answer === option
+                                      ? "bg-green-50 text-green-900 border-green-300 font-medium"
+                                      : "bg-gray-50 border-gray-200"
+                                  }`}
+                                >
+                                  <span className="font-medium mr-2">
+                                    {String.fromCharCode(
+                                      65 + index,
+                                    )}.
+                                  </span>
+                                  {option}
+                                  {question.answer === option && (
+                                    <span className="ml-2 text-xs text-green-700">
+                                      ✓ Correct Answer
+                                    </span>
+                                  )}
+                                </div>
+                              ),
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Correct Answer for True/False */}
+                      {question.question_type === "True/False" && question.answer && (
+                        <div>
+                          <h4 className="text-sm mb-2 text-muted-foreground">Answer:</h4>
+                          <div className="flex gap-3">
                             <div
-                              key={index}
-                              className={`p-2 rounded text-sm ${
-                                index === question.correctAnswer
-                                  ? "bg-green-100 text-green-800 border border-green-300"
-                                  : "bg-gray-50"
+                              className={`px-4 py-2 rounded text-sm border ${
+                                question.answer === "True"
+                                  ? "bg-green-50 text-green-900 border-green-300 font-medium"
+                                  : "bg-gray-50 border-gray-200"
                               }`}
                             >
-                              <span className="font-medium">
-                                {String.fromCharCode(65 + index)}.
-                              </span>{" "}
-                              {option}
-                              {index === question.correctAnswer && (
-                                <span className="ml-2 text-xs">✓ Correct</span>
+                              True
+                              {question.answer === "True" && (
+                                <span className="ml-2 text-xs text-green-700">
+                                  ✓ Correct
+                                </span>
                               )}
                             </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {question.type === "True/False" && (
-                        <div className="flex space-x-4">
-                          <div
-                            className={`p-2 rounded text-sm ${
-                              question.correctAnswer === 0
-                                ? "bg-green-100 text-green-800 border border-green-300"
-                                : "bg-gray-50"
-                            }`}
-                          >
-                            True{" "}
-                            {question.correctAnswer === 0 && (
-                              <span className="ml-2 text-xs">✓ Correct</span>
-                            )}
-                          </div>
-                          <div
-                            className={`p-2 rounded text-sm ${
-                              question.correctAnswer === 1
-                                ? "bg-green-100 text-green-800 border border-green-300"
-                                : "bg-gray-50"
-                            }`}
-                          >
-                            False{" "}
-                            {question.correctAnswer === 1 && (
-                              <span className="ml-2 text-xs">✓ Correct</span>
-                            )}
+                            <div
+                              className={`px-4 py-2 rounded text-sm border ${
+                                question.answer === "False"
+                                  ? "bg-green-50 text-green-900 border-green-300 font-medium"
+                                  : "bg-gray-50 border-gray-200"
+                              }`}
+                            >
+                              False
+                              {question.answer === "False" && (
+                                <span className="ml-2 text-xs text-green-700">
+                                  ✓ Correct
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       )}
 
-                      {question.tags && question.tags.length > 0 && (
-                        <div className="mt-3 flex flex-wrap gap-1">
-                          {question.tags.map((tag, index) => (
-                            <Badge key={index} variant="secondary" className="text-xs">
-                              {tag}
+                      {/* Answer for Open-Ended */}
+                      {question.question_type === "Open-Ended" && question.answer && (
+                        <div>
+                          <h4 className="text-sm mb-2 text-muted-foreground">Expected Answer:</h4>
+                          <div className="p-3 bg-green-50 border border-green-200 rounded text-sm">
+                            {question.answer}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Explanation */}
+                      {question.explanation && (
+                        <div>
+                          <h4 className="text-sm mb-2 text-muted-foreground">Explanation:</h4>
+                          <div className="p-3 bg-blue-50 border border-blue-200 rounded text-sm">
+                            {question.explanation}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Metadata Footer */}
+                      <div className="pt-3 border-t">
+                        <div className="flex flex-wrap gap-2 items-center">
+                          <span className="text-xs text-muted-foreground mr-1">Metadata:</span>
+                          {question.difficulty && (
+                            <Badge
+                              className={getDifficultyColor(
+                                question.difficulty,
+                              )}
+                            >
+                              Difficulty: {question.difficulty}
                             </Badge>
-                          ))}
+                          )}
+                          {question.marks !== undefined && (
+                            <Badge variant="outline" className="bg-amber-50">
+                              {question.marks} {question.marks === 1 ? "mark" : "marks"}
+                            </Badge>
+                          )}
+                          {question.concepts && (
+                            <Badge variant="secondary" className="bg-purple-50 text-purple-800">
+                              Topic: {question.concepts}
+                            </Badge>
+                          )}
+                          {question.course_id && (
+                            <Badge variant="secondary" className="bg-blue-50 text-blue-800">
+                              Course: {question.course_id}
+                            </Badge>
+                          )}
+                          {question.assessment_id && (
+                            <Badge variant="secondary" className="bg-slate-50 text-slate-800">
+                              Assessment: {question.assessment_id}
+                            </Badge>
+                          )}
                         </div>
-                      )}
+                      </div>
                     </CardContent>
                   </Card>
                 ))}
+
+                {uploadedQuestions.length === 0 && (
+                  <div className="text-center py-8">
+                    <p className="text-muted-foreground">
+                      No questions uploaded yet. Upload a CSV
+                      file to see questions here.
+                    </p>
+                  </div>
+                )}
               </div>
+
+              {/* Save Questions Button */}
+              {uploadedQuestions.length > 0 && (
+                <div className="mt-6 flex justify-end space-x-3">
+                  <Button
+                    variant="outline"
+                    onClick={() => setUploadedQuestions([])}
+                  >
+                    Clear All
+                  </Button>
+                  <Button
+                    onClick={handleSaveQuestions}
+                    className="flex items-center space-x-2"
+                  >
+                    <Save className="h-4 w-4" />
+                    <span>Save {uploadedQuestions.length} Questions to Library</span>
+                  </Button>
+                </div>
+              )}
             </CardContent>
-          </Card> */}
+          </Card>
+        )}
       </div>
     </div>
   );
