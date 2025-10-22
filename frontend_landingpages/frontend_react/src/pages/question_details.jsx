@@ -4,38 +4,105 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../co
 import { Button } from "../components/button";
 import { Badge } from "../components/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/tabs";
-import {
-  ArrowLeft,
-  BarChart3,
-  Edit3,
-  Download,
-  Eye,
-  HelpCircle,
-  Lightbulb,
-} from "lucide-react";
+import { ArrowLeft, HelpCircle, Eye, Plus } from "lucide-react";
 
 export function QuestionDetails({ questionId, onBack = () => {}, onViewQuestion }) {
   const [questionData, setQuestionData] = useState(null);
   const [loading, setLoading] = useState(true);
 
-useEffect(() => {
-  const fetchQuestionData = async () => {
-    try {
-      setLoading(true);
-      const response = await axios.get(`http://localhost:5003/api/questions/${questionId}`);
-      setQuestionData(response.data.data); // not response.data.data || []
-    } catch (error) {
-      console.error("Error fetching question:", error);
-    } finally {
-      setLoading(false);
+  const [similarQuestions, setSimilarQuestions] = useState([]);
+  const [loadingSimilar, setLoadingSimilar] = useState(true);
+
+  const [usageHistory, setUsageHistory] = useState([]);
+  const [changeHistory, setChangeHistory] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(true);
+
+  const [previewQuestions, setPreviewQuestions] = useState([]); 
+
+  // Fetch question details
+  useEffect(() => {
+    const fetchQuestionData = async () => {
+      try {
+        setLoading(true);
+        const response = await axios.get(`http://localhost:5003/api/questions/${questionId}`);
+        setQuestionData(response.data.data);
+      } catch (error) {
+        console.error("Error fetching question:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    if (questionId) fetchQuestionData();
+  }, [questionId]);
+
+  // Fetch similar questions
+  useEffect(() => {
+    const fetchSimilarQuestions = async () => {
+      try {
+        setLoadingSimilar(true);
+        const suggestionsRes = await axios.get(
+          `http://localhost:5003/api/questions/${questionId}/suggestions?top_n=5`
+        );
+        const suggestedVariants = suggestionsRes.data.suggested_variants || [];
+
+        const detailsPromises = suggestedVariants.map((s) =>
+          axios.get(`http://localhost:5003/api/questions/${s.question_id}`).then((res) => ({
+            ...res.data.data,
+            similarity: s.similarity,
+          }))
+        );
+
+        const details = await Promise.all(detailsPromises);
+        setSimilarQuestions(details);
+      } catch (err) {
+        console.error("Error fetching similar questions:", err);
+      } finally {
+        setLoadingSimilar(false);
+      }
+    };
+    if (questionId) fetchSimilarQuestions();
+  }, [questionId]);
+
+  // Fetch usage & change history
+  useEffect(() => {
+    const fetchHistory = async () => {
+      try {
+        setLoadingHistory(true);
+        const [usageRes, changeRes] = await Promise.all([
+          axios.get(`http://localhost:5003/api/questions/${questionId}/usage-history`),
+          axios.get(`http://localhost:5003/api/questions/${questionId}/change-history`),
+        ]);
+        setUsageHistory(usageRes.data.usage || []);
+        setChangeHistory(changeRes.data.changes || []);
+      } catch (err) {
+        console.error("Error fetching history:", err);
+      } finally {
+        setLoadingHistory(false);
+      }
+    };
+    if (questionId) fetchHistory();
+  }, [questionId]);
+
+  // handle add to preview
+  const handleAddToPreview = (question) => {
+    if (!previewQuestions.find((q) => q.question_id === question.question_id)) {
+      setPreviewQuestions((prev) => [...prev, question]);
     }
   };
 
-  if (questionId) {
-    fetchQuestionData();
-  }
-}, [questionId]);
-
+  // handle view details
+  const handleViewDetails = (id) => {
+    if (onViewQuestion) {
+      onViewQuestion(id); // delegate to parent
+    } else {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      setLoading(true);
+      axios
+        .get(`http://localhost:5003/api/questions/${id}`)
+        .then((res) => setQuestionData(res.data.data))
+        .finally(() => setLoading(false));
+    }
+  };
 
   const getDifficultyColor = (difficulty) => {
     switch (difficulty?.toLowerCase()) {
@@ -99,131 +166,163 @@ useEffect(() => {
         <div className="flex flex-col md:flex-row gap-8">
           {/* Left Section */}
           <div className="flex-1 space-y-6">
+            {/* Question Card */}
             <Card>
               <CardHeader>
                 <div className="flex items-start justify-between mb-4">
                   <Badge className={getDifficultyColor(questionData.difficulty)}>
                     {questionData.difficulty}
                   </Badge>
-                  <div className="flex space-x-2">
-                    <Button variant="outline" size="sm">
-                      <Edit3 className="h-4 w-4 mr-2" /> Edit
-                    </Button>
-                    <Button size="sm">
-                      <Download className="h-4 w-4 mr-2" /> Import
-                    </Button>
-                  </div>
                 </div>
                 <CardTitle>{questionData.assessment_type}</CardTitle>
                 <CardDescription>{questionData.question_type}</CardDescription>
               </CardHeader>
 
               <CardContent className="space-y-4">
-                {/* Context */}
                 {questionData.context?.context_text && (
                   <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-900 whitespace-pre-line">
                     {questionData.context.context_text}
                   </div>
                 )}
+                <div className="text-gray-800 text-base font-medium">{questionData.question_text}</div>
 
-                {/* Question Text */}
-                <div className="text-gray-800 text-base font-medium">
-                  {questionData.question_text}
-                </div>
-
-                {/* Concepts */}
                 {Array.isArray(questionData.concepts) && questionData.concepts.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-3">
-                    {questionData.concepts.map((c, i) => (
-                      <Badge key={i} variant="secondary" className="text-xs">
-                        {c.trim()}
-                      </Badge>
-                    ))}
-                  </div>
+                  <p className="text-sm text-gray-700 mt-3">
+                    {questionData.concepts.map((c) => c.trim()).join(", ")}
+                  </p>
                 )}
               </CardContent>
             </Card>
 
-            {/* Analytics Tabs placeholder */}
+            {/* Analytics & History */}
             <Card>
               <CardHeader>
                 <CardTitle>Question Analytics & History</CardTitle>
-                <CardDescription>No analytics data available yet.</CardDescription>
+                <CardDescription>(Detailed usage statistics and modification history)</CardDescription>
               </CardHeader>
               <CardContent>
                 <Tabs defaultValue="usage">
                   <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="usage">Usage</TabsTrigger>
-                    <TabsTrigger value="changes">Changes</TabsTrigger>
+                    <TabsTrigger value="usage">Usage History</TabsTrigger>
+                    <TabsTrigger value="changes">Change History</TabsTrigger>
                   </TabsList>
+
+                  {/* Usage History */}
                   <TabsContent value="usage">
-                    <p className="text-sm text-gray-500 mt-2">Usage data unavailable.</p>
+                    {loadingHistory ? (
+                      <p className="text-sm text-gray-500 mt-2">Loading usage history...</p>
+                    ) : usageHistory.length === 0 ? (
+                      <p className="text-sm text-gray-500 mt-2">No usage history available.</p>
+                    ) : (
+                      <ul className="space-y-4 mt-2">
+                        {usageHistory.map((u, idx) => (
+                          <li key={idx} className="p-3 border border-gray-200 rounded bg-gray-50">
+                            <p className="font-semibold">{u.assessment_name}</p>
+                            <p className="text-sm text-gray-600">
+                              {u.num_students} students • {u.course_code} • {u.instructor}
+                            </p>
+                            <p className="text-xs text-muted-foreground">{u.semester}</p>
+                            <p className="text-xs text-muted-foreground">{u.date}</p>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </TabsContent>
+
+                  {/* Change History */}
                   <TabsContent value="changes">
-                    <p className="text-sm text-gray-500 mt-2">Change history unavailable.</p>
+                    {loadingHistory ? (
+                      <p className="text-sm text-gray-500 mt-2">Loading change history...</p>
+                    ) : changeHistory.length === 0 ? (
+                      <p className="text-sm text-gray-500 mt-2">No change history available.</p>
+                    ) : (
+                      <ul className="space-y-4 mt-2">
+                        {changeHistory.map((c, idx) => (
+                          <li key={idx} className="p-3 border border-gray-200 rounded bg-gray-50 space-y-1">
+                            <p className="font-semibold">{c.field}</p>
+                            <p className="text-sm text-gray-600">
+                              by {c.author} • {c.date}
+                            </p>
+                            <div className="text-sm">
+                              <p>
+                                <strong>Previous:</strong> {c.previous}
+                              </p>
+                              <p>
+                                <strong>New:</strong> {c.new}
+                              </p>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </TabsContent>
                 </Tabs>
               </CardContent>
             </Card>
-          </div>
 
-          {/* Right Section */}
-          <aside className="w-full md:w-1/3 space-y-6 mt-6 md:mt-0">
+            {/* Similar Questions */}
             <Card>
               <CardHeader>
-                <CardTitle>Question Information</CardTitle>
+                <CardTitle>Similar Questions</CardTitle>
+                <CardDescription>
+                  (Questions with semantic similarity based on content and context)
+                </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <div>
-                  <span className="text-muted-foreground">Course Code</span>
-                  <p className="font-medium">{questionData.course_code}</p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Course Name</span>
-                  <p className="font-medium">{questionData.course_name}</p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Assessment Type</span>
-                  <p className="font-medium">{questionData.assessment_type}</p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Version</span>
-                  <p className="font-medium">{questionData.version_number}</p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Created At</span>
-                  <p className="font-medium">
-                    {new Date(questionData.created_at).toLocaleDateString()}
-                  </p>
-                </div>
+
+              <CardContent className="space-y-4">
+                {loadingSimilar ? (
+                  <p className="text-gray-500">Loading similar questions...</p>
+                ) : similarQuestions.length === 0 ? (
+                  <p className="text-gray-500">No similar questions found.</p>
+                ) : (
+                  similarQuestions.map((q) => (
+                    <Card key={q.question_id} className="p-4 bg-gray-50 border border-gray-200">
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="font-semibold text-sm">
+                          {Math.round(q.similarity * 100)}% match
+                        </span>
+                        <Badge className={getDifficultyColor(q.difficulty)}>
+                          {q.difficulty}
+                        </Badge>
+                      </div>
+
+                      <p className="font-medium">{q.question_text}</p>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {q.course_code} - {q.course_name}
+                      </p>
+
+                      {q.concepts && q.concepts.length > 0 && (
+                        <p className="text-sm text-gray-700 mt-2">
+                          {q.concepts.map((c) => c.trim()).join(", ")}
+                        </p>
+                      )}
+
+                      {/* Buttons added here */}
+                      <div className="flex space-x-2 pt-3">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex-1"
+                          onClick={() => handleViewDetails(q.question_id)}
+                        >
+                          <Eye className="h-4 w-4 mr-1" />
+                          View Details
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="flex-1"
+                          onClick={() => handleAddToPreview(q)}
+                        >
+                          <Plus className="h-4 w-4 mr-1" />
+                          Add to Preview
+                        </Button>
+                      </div>
+                    </Card>
+                  ))
+                )}
               </CardContent>
             </Card>
-
-            {/* Tags section */}
-            {questionData.tags && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center space-x-2">
-                    <Lightbulb className="h-5 w-5" />
-                    <span>Tags</span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="flex flex-wrap gap-1">
-                  {Array.isArray(questionData.tags.concepts)
-                    ? questionData.tags.concepts.map((tag, i) => (
-                        <Badge key={i} variant="secondary" className="text-xs">
-                          {tag.trim()}
-                        </Badge>
-                      ))
-                    : Object.entries(questionData.tags).map(([k, v]) => (
-                        <Badge key={k} variant="secondary" className="text-xs">
-                          {`${k}: ${v}`}
-                        </Badge>
-                      ))}
-                </CardContent>
-              </Card>
-            )}
-          </aside>
+          </div>
         </div>
       </div>
     </div>
