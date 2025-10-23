@@ -1,27 +1,26 @@
-# ============================================================
-# Dockerfile for quizbank-api
-# ============================================================
+# Start from official Postgres image
+FROM postgres:15
 
-# Use official lightweight Python image
-FROM python:3.11-slim
+# Set environment
+ENV POSTGRES_USER=postgres
+ENV POSTGRES_PASSWORD=postgres
+ENV POSTGRES_DB=quizbank
 
-# Set working directory
-WORKDIR /app
+# Copy initialization SQL scripts
+COPY db-init/ /docker-entrypoint-initdb.d/
 
-# Install system dependencies (optional but helps with psycopg2)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential libpq-dev && \
-    rm -rf /var/lib/apt/lists/*
+# Copy backup and restore scripts (optional utilities)
+COPY scripts/ /scripts/
+RUN chmod +x /scripts/*.sh
 
-# Copy requirements file and install dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Install utilities for backup (optional)
+RUN apt-get update && apt-get install -y python3 python3-pip cron vim \
+    && pip install sqlalchemy pandas openpyxl psycopg2-binary \
+    && apt-get clean
 
-# Copy the rest of your application
-COPY . .
+# Optional: add cron job for daily backups
+# (uncomment if you want automatic backups)
+# RUN echo "0 3 * * * root /scripts/auto_backup.sh" >> /etc/crontab
 
-# Expose Flask port
-EXPOSE 5000
-
-# Start your app (same as docker-compose command)
-CMD ["bash", "-c", "python load_sample_data.py && python app.py"]
+WORKDIR /scripts
+CMD ["postgres"]

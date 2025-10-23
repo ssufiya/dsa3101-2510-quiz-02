@@ -4,7 +4,7 @@ services:
   # PostgreSQL Database
   db:
     image: postgres:13
-    container_name: quizbank-db
+    container_name: quizbank_db
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${DB_USER:-postgres}
@@ -14,7 +14,8 @@ services:
       - "${DB_EXTERNAL_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./backend/quizbank-db/db-init:/docker-entrypoint-initdb.d  # SQL init files
+      # - ./backend/quizbank-db/db-init:/docker-entrypoint-initdb.d  # SQL init files
+      - ./backend/quizbank-db/db-init/data:/db-seed/data:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s

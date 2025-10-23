@@ -1,127 +1,131 @@
-BEGIN;
+-- 01_schema.sql
+-- Core QuizBank schema (PostgreSQL)
 
--- ================================================================
--- Drop existing tables (in dependency-safe order)
--- ================================================================
-DROP TABLE IF EXISTS attachments CASCADE;
-DROP TABLE IF EXISTS questions CASCADE;
-DROP TABLE IF EXISTS contexts CASCADE;
-DROP TABLE IF EXISTS assessments CASCADE;
-DROP TABLE IF EXISTS courses CASCADE;
-DROP TABLE IF EXISTS users CASCADE;
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
 
--- ================================================================
--- USERS TABLE (not yet used, but kept for completeness)
--- ================================================================
-CREATE TABLE users (
-    user_id SERIAL PRIMARY KEY,
-    username TEXT,
-    password_hash TEXT NOT NULL
+-- ---------- users ----------
+CREATE TABLE IF NOT EXISTS users (
+  user_id        BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  username       VARCHAR(128) NOT NULL UNIQUE,
+  password_hash  VARCHAR(256) NOT NULL
 );
 
--- ================================================================
--- COURSES TABLE
--- ================================================================
-CREATE TABLE courses (
-    course_id SERIAL PRIMARY KEY,
-    course_code TEXT UNIQUE NOT NULL,
-    course_name TEXT
+-- ---------- courses ----------
+CREATE TABLE IF NOT EXISTS courses (
+  course_id    BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  course_code  VARCHAR(32)  NOT NULL UNIQUE,
+  course_name  VARCHAR(256) NOT NULL
 );
 
--- ================================================================
--- ASSESSMENTS TABLE
--- ================================================================
-CREATE TABLE assessments (
-    assessment_id SERIAL PRIMARY KEY,
-    course_id INTEGER NOT NULL REFERENCES courses(course_id) ON DELETE CASCADE,
-    assessment_type TEXT NOT NULL,
-    assessment_acadyear TEXT,
-    assessment_semester TEXT,
-    created_at TIMESTAMP DEFAULT NOW(),
-    created_by INTEGER REFERENCES users(user_id) ON DELETE SET NULL
+-- ---------- assessments ----------
+CREATE TABLE IF NOT EXISTS assessments (
+  assessment_id        BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  course_id            BIGINT       NOT NULL REFERENCES courses(course_id) ON DELETE CASCADE,
+  assessment_type      VARCHAR(64)  NOT NULL,
+  assessment_acadyear  VARCHAR(32),
+  assessment_semester  VARCHAR(32),
+  created_at           TIMESTAMPTZ  DEFAULT NOW(),
+  created_by           BIGINT       REFERENCES users(user_id),
+
+  CONSTRAINT uq_assessment UNIQUE (course_id, assessment_type, assessment_acadyear, assessment_semester)
 );
 
-CREATE UNIQUE INDEX uq_assessments_unique_idx
-ON assessments (
-  course_id,
-  assessment_type,
-  COALESCE(assessment_acadyear, ''),
-  COALESCE(assessment_semester, '')
+-- ---------- contexts ----------
+CREATE TABLE IF NOT EXISTS contexts (
+  context_id       BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  assessment_id    BIGINT      NOT NULL REFERENCES assessments(assessment_id) ON DELETE CASCADE,
+  course_id        BIGINT      NOT NULL REFERENCES courses(course_id)     ON DELETE CASCADE,
+  context_local_id VARCHAR(64) NOT NULL,
+  context_text     TEXT        NOT NULL,
+
+  CONSTRAINT uq_context UNIQUE (assessment_id, context_local_id)
 );
 
--- ================================================================
--- CONTEXTS TABLE
--- Each context belongs to a course and an assessment
--- ================================================================
-CREATE TABLE contexts (
-    context_id SERIAL PRIMARY KEY,
-    assessment_id INTEGER NOT NULL REFERENCES assessments(assessment_id) ON DELETE CASCADE,
-    course_id INTEGER NOT NULL REFERENCES courses(course_id) ON DELETE CASCADE,
-    context_local_id TEXT,
-    context_text TEXT,
-    context_attachment TEXT,
-    CONSTRAINT uq_contexts_key UNIQUE (assessment_id, context_local_id)
+-- ---------- context_attachments ----------
+CREATE TABLE IF NOT EXISTS context_attachments (
+  context_attachment_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  context_id      BIGINT       NOT NULL REFERENCES contexts(context_id) ON DELETE CASCADE,
+  attachment_name VARCHAR(256) NOT NULL,
+  attachment_url  VARCHAR(1024),
+  CONSTRAINT uq_context_attachment UNIQUE (context_id, attachment_name)
 );
 
--- ================================================================
--- QUESTIONS TABLE
--- Each question belongs to a course, assessment, and optionally a context
--- ================================================================
+-- ---------- questions ----------
+CREATE TABLE IF NOT EXISTS questions (
+  question_id      BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  assessment_id    BIGINT      NOT NULL REFERENCES assessments(assessment_id) ON DELETE CASCADE,
+  course_id        BIGINT      NOT NULL REFERENCES courses(course_id)     ON DELETE CASCADE,
+  context_id       BIGINT      REFERENCES contexts(context_id) ON DELETE SET NULL,
 
-CREATE TABLE questions (
-    question_id SERIAL PRIMARY KEY,
-    course_id INTEGER REFERENCES courses(course_id) ON DELETE CASCADE,
-    assessment_id INTEGER REFERENCES assessments(assessment_id) ON DELETE CASCADE,
-    context_id INTEGER REFERENCES contexts(context_id) ON DELETE SET NULL,
+  question_number      INTEGER,
+  sub_question_number  INTEGER,
 
-    question_number TEXT,
-    sub_question_number TEXT,
-    question_text TEXT NOT NULL,
-    question_type VARCHAR(50),
+  question_text    TEXT        NOT NULL,
+  question_type    VARCHAR(64),
 
-    option_a TEXT,
-    option_b TEXT,
-    option_c TEXT,
-    option_d TEXT,
-    option_e TEXT,
-    
-    correct_answer TEXT,
-    explanation TEXT,
-    points NUMERIC DEFAULT 1.0,
-    difficulty VARCHAR(50),
-    concepts TEXT,
+  option_a         TEXT,
+  option_b         TEXT,
+  option_c         TEXT,
+  option_d         TEXT,
+  option_e         TEXT,
 
-    created_at TIMESTAMP DEFAULT NOW(),
-    created_by INTEGER REFERENCES users(user_id) ON DELETE SET NULL,
-    version_number INTEGER DEFAULT 1,
-    previous_version_id INTEGER REFERENCES questions(question_id) DEFERRABLE INITIALLY DEFERRED,
+  correct_answer   TEXT,
+  explanation      TEXT,
+  points           DECIMAL(4,1),
+  difficulty       VARCHAR(32),
+  concepts         TEXT,
 
-    CONSTRAINT uq_questions_dedupe UNIQUE (course_id, assessment_id, question_text)
+  created_by       BIGINT       REFERENCES users(user_id),
+  created_at       TIMESTAMPTZ  DEFAULT NOW(),
+
+  -- versioning (links set after bulk insert in 04_seed_questions.sql)
+  version_number       INTEGER      NOT NULL DEFAULT 1,
+  previous_version_id  BIGINT,
+  original_id          BIGINT,
+  is_latest            BOOLEAN      NOT NULL DEFAULT TRUE,
+
+  -- natural de-dup key (matches your updater)
+  CONSTRAINT uq_question UNIQUE (course_id, assessment_id, question_text)
 );
 
+-- self-referential FKs for versioning
+ALTER TABLE questions
+  ADD CONSTRAINT fk_questions_previous
+  FOREIGN KEY (previous_version_id)
+  REFERENCES questions(question_id)
+  ON DELETE SET NULL
+  DEFERRABLE INITIALLY DEFERRED;
 
--- ================================================================
--- ATTACHMENTS TABLE
--- Stores all files associated with contexts or questions
--- ================================================================
-CREATE TABLE attachments (
-    attachment_id SERIAL PRIMARY KEY,
-    context_id INTEGER REFERENCES contexts(context_id) ON DELETE CASCADE,
-    question_id INTEGER REFERENCES questions(question_id) ON DELETE CASCADE,
-    attachment_name VARCHAR(255),
-    attachment_type VARCHAR(255),
-    CONSTRAINT uq_attachments_question_file UNIQUE (question_id, attachment_name),
-    CONSTRAINT uq_attachments_context_file UNIQUE (context_id, attachment_name)
+ALTER TABLE questions
+  ADD CONSTRAINT fk_questions_original
+  FOREIGN KEY (original_id)
+  REFERENCES questions(question_id)
+  ON DELETE SET NULL
+  DEFERRABLE INITIALLY DEFERRED;
+
+-- safety checks
+ALTER TABLE questions
+  ADD CONSTRAINT chk_prev_not_self
+  CHECK (previous_version_id IS NULL OR previous_version_id <> question_id);
+
+ALTER TABLE questions
+  ADD CONSTRAINT chk_orig_not_self
+  CHECK (original_id IS NULL OR original_id <> question_id);
+
+-- ---------- question_attachments ----------
+CREATE TABLE IF NOT EXISTS question_attachments (
+  question_attachment_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  question_id    BIGINT       NOT NULL REFERENCES questions(question_id) ON DELETE CASCADE,
+  attachment_name VARCHAR(256) NOT NULL,
+  attachment_url  VARCHAR(1024),
+  CONSTRAINT uq_question_attachment UNIQUE (question_id, attachment_name)
 );
 
--- ================================================================
--- Helpful indexes
--- ================================================================
-CREATE INDEX idx_questions_context_id ON questions(context_id);
-CREATE INDEX idx_questions_assessment_id ON questions(assessment_id);
-CREATE INDEX idx_contexts_assessment_id ON contexts(assessment_id);
-CREATE INDEX idx_contexts_course_id ON contexts(course_id);
-CREATE INDEX idx_attachments_question_id ON attachments(question_id);
-CREATE INDEX idx_attachments_context_id ON attachments(context_id);
-
-COMMIT;
+-- helpful indexes
+CREATE INDEX IF NOT EXISTS idx_assessments_course     ON assessments(course_id);
+CREATE INDEX IF NOT EXISTS idx_contexts_assessment    ON contexts(assessment_id);
+CREATE INDEX IF NOT EXISTS idx_questions_assessment   ON questions(assessment_id);
+CREATE INDEX IF NOT EXISTS idx_questions_context      ON questions(context_id);
+CREATE INDEX IF NOT EXISTS idx_questions_previous     ON questions(previous_version_id);
+CREATE INDEX IF NOT EXISTS idx_questions_original     ON questions(original_id);
