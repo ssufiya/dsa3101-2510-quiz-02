@@ -59,25 +59,25 @@ const handleFileUpload = (event) => {
     complete: (results) => {
       const questions = results.data.map((row, idx) => {
         const options = [
-          row["Option A"],
-          row["Option B"],
-          row["Option C"],
-          row["Option D"],
-          row["Option E"],
+          row["option_a"],
+          row["option_b"],
+          row["option_c"],
+          row["option_d"],
+          row["option_e"],
         ].filter((o) => o && o.trim() !== "");
 
         return {
           id: `preview-${idx + 1}`, // temporary id
-          question_text: row["Question Text"] || "",
-          question_type: row["Question Type"] || "MCQ",
+          question_text: row["question_text"] || "",
+          question_type: row["question_type"] || "MCQ",
           options,
-          answer: row["Correct Answer"] || "",
-          difficulty: row["Difficulty"] || "",
-          concepts: row["Concepts"] || "",
-          marks: row["Points"] || 1,
-          course_id: row["Course ID"] || "",
-          assessment_id: row["Assessment ID"] || "",
-          explanation: row["Explanation"] || "",
+          answer: row["correct_answer"] || "",
+          difficulty: row["difficulty"] || "",
+          concepts: row["concepts"] || "",
+          marks: row["points"] || 1,
+          course_id: row["course_id"] || "",
+          assessment_id: row["assessment_id"] || "",
+          explanation: row["explanation"] || "",
         };
       });
 
