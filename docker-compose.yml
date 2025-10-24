@@ -13,9 +13,14 @@ services:
     ports:
       - "${DB_EXTERNAL_PORT:-5433}:5432"
     volumes:
+      # Persistent database data
       - postgres_data:/var/lib/postgresql/data
-      # - ./backend/quizbank-db/db-init:/docker-entrypoint-initdb.d  # SQL init files
+      # SQL schema files (for init_db.py to read)
+      - ./backend/quizbank-db/db-init:/db-init:ro
+      # Seed data (courses CSV and initial questions/contexts)
       - ./backend/quizbank-db/db-init/data:/db-seed/data:ro
+      # Backup directory (shared with host for persistence)
+      - ./backend/backups:/backups
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
@@ -36,19 +41,48 @@ services:
     env_file:
       - .env  # Reads from root .env
     environment:
-      # These override .env if set
+      # Database connection (internal docker network)
       DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@db:5432/${DB_NAME:-quizbank}
       DB_HOST: db
       DB_PORT: 5432
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_NAME: ${DB_NAME:-quizbank}
       PYTHONPATH: /app
+      # Bootstrap configuration
+      RESTORE_IF_BACKUP: ${RESTORE_IF_BACKUP:-1}
+      SEED_FORCE: ${SEED_FORCE:-0}
     volumes:
+      # Application code
       - ./backend:/app
+      # Prevent __pycache__ from syncing
       - /app/__pycache__
+      # Storage for PNG attachments (live working directory)
+      - ./backend/quizbank-db/storage/png:/app/quizbank-db/storage/png
+      # Upload staging directory
+      - ./backend/quizbank-db/uploads:/app/quizbank-db/uploads
+      # Backup directories (shared with host)
+      - ./backend/backups:/app/backups
+      # Database init scripts and data
+      - ./backend/quizbank-db/db-init:/app/quizbank-db/db-init:ro
+      - ./backend/quizbank-db/scripts:/app/quizbank-db/scripts
     depends_on:
       db:
         condition: service_healthy
     networks:
       - quizbank-network
+    command: >
+      bash -c "
+        echo 'Waiting for database to be ready...' &&
+        sleep 5 &&
+        if [ -f /app/quizbank-db/scripts/bootstrap_db.sh ]; then
+          echo 'Running bootstrap script...' &&
+          chmod +x /app/quizbank-db/scripts/*.sh &&
+          /app/quizbank-db/scripts/bootstrap_db.sh || echo 'Bootstrap failed, continuing...';
+        fi &&
+        echo 'Starting FastAPI server...' &&
+        uvicorn app.main:app --host 0.0.0.0 --port 5000 --reload
+      "
 
   # Frontend (commented out for now - uncomment when ready)
   # frontend:

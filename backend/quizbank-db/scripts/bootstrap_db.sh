@@ -80,7 +80,7 @@ else
 
   echo "📥 Seeding DB via init_db.py (SEED_FORCE=$SEED_FORCE, SEED_SKIP_XLSX=$SEED_SKIP_XLSX)…"
   SEED_FORCE="$SEED_FORCE" SEED_SKIP_XLSX="$SEED_SKIP_XLSX" \
-    python "$SCRIPTS/init_db.py"
+    python3 "$SCRIPTS/init_db.py"
   RAN_ACTION="seed"
 
   echo "💾 Creating immediate backup after seed…"

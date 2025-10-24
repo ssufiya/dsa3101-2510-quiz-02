@@ -2,10 +2,16 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies for database operations, backup/restore, and file processing
 RUN apt-get update && apt-get install -y \
     gcc \
     postgresql-client \
+    bash \
+    gzip \
+    tar \
+    curl \
+    zip \
+    unzip \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy and install Python dependencies
@@ -15,18 +21,29 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Make scripts executable
-RUN chmod +x scripts/init_db.py 2>/dev/null || true
+# Create necessary directories with proper permissions
+RUN mkdir -p \
+    /app/quizbank-db/storage/png \
+    /app/quizbank-db/uploads \
+    /app/backups/quizbank \
+    /app/backups/assets \
+    /app/quizbank-db/scripts \
+    /app/quizbank-db/db-init/data
+
+# Create .gitkeep files to preserve empty directories
+RUN touch /app/quizbank-db/storage/png/.gitkeep \
+    && touch /app/quizbank-db/uploads/.gitkeep \
+    && touch /app/backups/quizbank/.gitkeep \
+    && touch /app/backups/assets/.gitkeep
+
+# Make all scripts in the scripts directory executable
+RUN find /app/quizbank-db/scripts -type f -name "*.sh" -exec chmod +x {} \; || true
+RUN find /app/quizbank-db/scripts -type f -name "*.py" -exec chmod +x {} \; || true
+
+# Set proper permissions for working directories
+RUN chmod -R 755 /app/quizbank-db/storage \
+    && chmod -R 755 /app/quizbank-db/uploads \
+    && chmod -R 755 /app/backups
 
 # Expose port
 EXPOSE 5000
-
-# Copy entrypoint script
-COPY docker-entrypoint.sh /docker-entrypoint.sh
-RUN chmod +x /docker-entrypoint.sh
-
-# Use entrypoint
-ENTRYPOINT ["/docker-entrypoint.sh"]
-
-# Default command (can be overridden)
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "5000", "--reload"]
