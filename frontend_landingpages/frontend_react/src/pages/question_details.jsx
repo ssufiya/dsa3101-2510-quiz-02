@@ -5,7 +5,7 @@ import { Button } from "../components/button";
 import { Badge } from "../components/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/tabs";
 import { ArrowLeft, HelpCircle, Eye, Plus, ShoppingBasket, Edit } from "lucide-react";
-import { EditQuestion } from "./edit_question.jsx";
+import EditQuestion from "./edit_question.jsx";
 
 export function QuestionDetails({ 
   questionId, 
