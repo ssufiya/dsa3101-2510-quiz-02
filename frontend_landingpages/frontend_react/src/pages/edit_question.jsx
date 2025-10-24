@@ -17,10 +17,11 @@ export default function EditQuestion({ questionId, questionData, onBack, onSave 
   const [options, setOptions] = useState([]);
   const [tags, setTags] = useState("");
 
+  const difficultyOptions = ["low", "med", "hard"];
+  const questionTypeOptions = ["Code", "T/F", "MCQ", "MRQ","SRQ"];
+
   useEffect(() => {
     if (questionData) {
-      console.log("🟩 Populating fields with:", questionData);
-
       setQuestionText(questionData.question_text || "");
       setExplanation(questionData.explanation || "");
       setCourseName(questionData.course_name || "");
@@ -32,10 +33,7 @@ export default function EditQuestion({ questionId, questionData, onBack, onSave 
 
       if (questionData.options && typeof questionData.options === "object") {
         setOptions(
-          Object.entries(questionData.options).map(([key, value]) => ({
-            key,
-            value,
-          }))
+          Object.entries(questionData.options).map(([key, value]) => ({ key, value }))
         );
       }
 
@@ -54,34 +52,53 @@ export default function EditQuestion({ questionId, questionData, onBack, onSave 
   };
 
   const handleSave = async () => {
-    try {
-      const payload = {
-        question_text: questionText,
-        explanation,
-        course_name: courseName,
-        course_code: courseCode,
-        difficulty,
-        question_type: questionType,
-        assessment_type: assessmentType,
-        points,
-        options: options.reduce((acc, { key, value }) => {
-          acc[key] = value;
-          return acc;
-        }, {}),
-        concepts: tags.split(",").map((t) => t.trim()),
-      };
+    if (!questionText) return alert("Question text required");
 
-      const res = await axios.put(
-        `http://localhost:5003/api/questions/${questionId}`,
-        payload
+    const csvHeaders = [
+      "question_text",
+      "explanation",
+      "course_code",
+      "assessment_type",
+      "difficulty",
+      "points",
+      "concepts",
+      ...options.map((opt) => `option_${opt.key.toLowerCase()}`)
+    ];
+
+    const csvRow = [
+      `"${questionText.replace(/"/g, '""')}"`,
+      `"${explanation.replace(/"/g, '""')}"`,
+      `"${courseCode}"`,
+      `"${assessmentType}"`,
+      `"${difficulty}"`,
+      points,
+      `"${tags}"`,
+      ...options.map((opt) => `"${opt.value.replace(/"/g, '""')}"`)
+    ];
+
+    const csvContent = csvHeaders.join(",") + "\n" + csvRow.join(",");
+    const blob = new Blob([csvContent], { type: "text/csv" });
+    const formData = new FormData();
+    formData.append("file", blob, `question_${questionId}_edit.csv`);
+
+    try {
+      const res = await axios.post(
+        `http://localhost:5003/api/questions/${questionId}/editversion`,
+        formData,
+        { headers: { "Content-Type": "multipart/form-data" } }
       );
 
-      alert("✅ Question updated successfully!");
-      onSave(res.data);
+      const newId = res.data.new_question_id;
+      const newQuestionRes = await axios.get(
+        `http://localhost:5003/api/questions/${newId}`
+      );
+
+      alert(`✅ Question updated! New version: ${res.data.new_version_number}`);
+      onSave(newQuestionRes.data);
       onBack();
     } catch (err) {
       console.error("❌ Error updating question:", err);
-      alert("Error updating question");
+      alert(err.response?.data?.detail || "Error updating question");
     }
   };
 
@@ -92,46 +109,41 @@ export default function EditQuestion({ questionId, questionData, onBack, onSave 
       </CardHeader>
       <CardContent className="space-y-4">
         <label>Course Name</label>
-        <Input
-          value={courseName}
-          onChange={(e) => setCourseName(e.target.value)}
-        />
+        <Input value={courseName} onChange={(e) => setCourseName(e.target.value)} />
 
         <label>Course Code</label>
-        <Input
-          value={courseCode}
-          onChange={(e) => setCourseCode(e.target.value)}
-        />
+        <Input value={courseCode} onChange={(e) => setCourseCode(e.target.value)} />
 
         <label>Difficulty</label>
-        <Input
+        <select
           value={difficulty}
           onChange={(e) => setDifficulty(e.target.value)}
-        />
+          className="border rounded p-2 w-full"
+        >
+          {difficultyOptions.map((opt) => (
+            <option key={opt} value={opt}>{opt}</option>
+          ))}
+        </select>
 
         <label>Question Type</label>
-        <Input
+        <select
           value={questionType}
           onChange={(e) => setQuestionType(e.target.value)}
-        />
+          className="border rounded p-2 w-full"
+        >
+          {questionTypeOptions.map((opt) => (
+            <option key={opt} value={opt}>{opt}</option>
+          ))}
+        </select>
 
         <label>Assessment Type</label>
-        <Input
-          value={assessmentType}
-          onChange={(e) => setAssessmentType(e.target.value)}
-        />
+        <Input value={assessmentType} onChange={(e) => setAssessmentType(e.target.value)} />
 
         <label>Question Text</label>
-        <Textarea
-          value={questionText}
-          onChange={(e) => setQuestionText(e.target.value)}
-        />
+        <Textarea value={questionText} onChange={(e) => setQuestionText(e.target.value)} />
 
         <label>Explanation</label>
-        <Textarea
-          value={explanation}
-          onChange={(e) => setExplanation(e.target.value)}
-        />
+        <Textarea value={explanation} onChange={(e) => setExplanation(e.target.value)} />
 
         <label>Points</label>
         <Input
@@ -152,16 +164,11 @@ export default function EditQuestion({ questionId, questionData, onBack, onSave 
         ))}
 
         <label>Tags (comma separated)</label>
-        <Input
-          value={tags}
-          onChange={(e) => setTags(e.target.value)}
-        />
+        <Input value={tags} onChange={(e) => setTags(e.target.value)} />
 
         <div className="flex space-x-2 mt-4">
-          <Button onClick={handleSave}>Save</Button>
-          <Button variant="secondary" onClick={onBack}>
-            Cancel
-          </Button>
+          <Button onClick={handleSave}>Save / Upload New Version</Button>
+          <Button variant="secondary" onClick={onBack}>Cancel</Button>
         </div>
       </CardContent>
     </Card>
