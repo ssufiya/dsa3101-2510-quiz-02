@@ -1,355 +1,169 @@
-import { useState } from "react";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "../components/card";
-import { Input } from "../components/input";
-import { Label } from "../components/label";
+import { useState, useEffect } from "react";
+import axios from "axios";
 import { Button } from "../components/button";
+import { Input } from "../components/input";
 import { Textarea } from "../components/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../components/select";
-import {
-  ArrowLeft,
-  Save,
-  HelpCircle,
-  Plus,
-  Trash2,
-} from "lucide-react";
-import { Badge } from "../components/badge";
-import { toast } from "sonner";
+import { Card, CardContent, CardHeader, CardTitle } from "../components/card";
 
-export function EditQuestion({ questionId, questionData, onBack, onSave }) {
-  // Initialize state from questionData prop
-  const [questionText, setQuestionText] = useState(
-    questionData?.question || ""
-  );
-  const initialOptions =
-    questionData?.options ||
-    (questionData?.type === "True/False" ? ["True", "False"] : ["", "", "", ""]);
-  const [options, setOptions] = useState(initialOptions);
-  const [correctAnswer, setCorrectAnswer] = useState(
-    questionData?.correctAnswer !== undefined ? questionData.correctAnswer : 0
-  );
-  const [explanation, setExplanation] = useState(questionData?.explanation || "");
-  const [courseName, setCourseName] = useState(questionData?.courseName || "");
-  const [courseCode, setCourseCode] = useState(questionData?.courseCode || "");
-  const [difficulty, setDifficulty] = useState(questionData?.difficulty || "Medium");
-  const [questionType, setQuestionType] = useState(
-    questionData?.type || "Multiple Choice"
-  );
-  const [tags, setTags] = useState(
-    Array.isArray(questionData?.tags) ? questionData.tags.join(", ") : questionData?.tags || ""
-  );
+export default function EditQuestion({ questionId, questionData, onBack, onSave }) {
+  const [questionText, setQuestionText] = useState("");
+  const [explanation, setExplanation] = useState("");
+  const [courseName, setCourseName] = useState("");
+  const [courseCode, setCourseCode] = useState("");
+  const [difficulty, setDifficulty] = useState("Medium");
+  const [questionType, setQuestionType] = useState("Multiple Choice");
+  const [assessmentType, setAssessmentType] = useState("");
+  const [points, setPoints] = useState(1);
+  const [options, setOptions] = useState([]);
+  const [tags, setTags] = useState("");
 
-  const updateOption = (index, value) => {
-    const newOptions = [...options];
-    newOptions[index] = value;
-    setOptions(newOptions);
+  useEffect(() => {
+    if (questionData) {
+      console.log("🟩 Populating fields with:", questionData);
+
+      setQuestionText(questionData.question_text || "");
+      setExplanation(questionData.explanation || "");
+      setCourseName(questionData.course_name || "");
+      setCourseCode(questionData.course_code || "");
+      setDifficulty(questionData.difficulty || "Medium");
+      setQuestionType(questionData.question_type || "Multiple Choice");
+      setAssessmentType(questionData.assessment_type || "");
+      setPoints(questionData.points || 1);
+
+      if (questionData.options && typeof questionData.options === "object") {
+        setOptions(
+          Object.entries(questionData.options).map(([key, value]) => ({
+            key,
+            value,
+          }))
+        );
+      }
+
+      if (Array.isArray(questionData.concepts)) {
+        setTags(questionData.concepts.join(", "));
+      } else {
+        setTags("");
+      }
+    }
+  }, [questionData]);
+
+  const handleOptionChange = (index, value) => {
+    const updated = [...options];
+    updated[index].value = value;
+    setOptions(updated);
   };
 
-  const addOption = () => setOptions([...options, ""]);
+  const handleSave = async () => {
+    try {
+      const payload = {
+        question_text: questionText,
+        explanation,
+        course_name: courseName,
+        course_code: courseCode,
+        difficulty,
+        question_type: questionType,
+        assessment_type: assessmentType,
+        points,
+        options: options.reduce((acc, { key, value }) => {
+          acc[key] = value;
+          return acc;
+        }, {}),
+        concepts: tags.split(",").map((t) => t.trim()),
+      };
 
-  const removeOption = (index) => {
-    if (options.length > 2) {
-      const newOptions = options.filter((_, i) => i !== index);
-      setOptions(newOptions);
-      if (correctAnswer === index) setCorrectAnswer(0);
-      else if (correctAnswer > index) setCorrectAnswer(correctAnswer - 1);
+      const res = await axios.put(
+        `http://localhost:5003/api/questions/${questionId}`,
+        payload
+      );
+
+      alert("✅ Question updated successfully!");
+      onSave(res.data);
+      onBack();
+    } catch (err) {
+      console.error("❌ Error updating question:", err);
+      alert("Error updating question");
     }
   };
-
-  const handleSave = () => {
-    const baseData = {
-      id: questionId,
-      question: questionText,
-      explanation,
-      courseName,
-      courseCode,
-      difficulty,
-      type: questionType,
-      tags: tags
-        .split(",")
-        .map((tag) => tag.trim())
-        .filter((tag) => tag !== ""),
-      lastModified: new Date().toISOString(),
-    };
-
-    const updatedQuestion =
-      questionType === "Multiple Choice" || questionType === "True/False"
-        ? { ...baseData, options, correctAnswer }
-        : baseData;
-
-    if (onSave) {
-      onSave(updatedQuestion);
-      toast.success("Question updated successfully", {
-        description: "Your changes have been saved.",
-      });
-    }
-    onBack();
-  };
-
-  const isValid =
-    questionText.trim() !== "" &&
-    courseName.trim() !== "" &&
-    courseCode.trim() !== "" &&
-    (questionType === "Short Answer" ||
-      questionType === "Essay" ||
-      (questionType === "Multiple Choice" && options.every((opt) => opt.trim() !== "")) ||
-      questionType === "True/False");
-
-  if (!questionId || !questionData) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Card className="text-center p-8">
-          <CardContent>
-            <HelpCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg mb-2">Question Not Found</h3>
-            <p className="text-muted-foreground mb-4">
-              The requested question could not be found.
-            </p>
-            <Button onClick={onBack}>
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Question Details
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center h-16 space-x-4">
-            <Button
-              variant="ghost"
-              onClick={onBack}
-              className="flex items-center space-x-2"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              <span>Back to Question Details</span>
-            </Button>
-            <div className="h-6 w-px bg-gray-300"></div>
-            <div className="flex items-center space-x-3">
-              <div className="bg-primary rounded-lg p-2">
-                <HelpCircle className="h-6 w-6 text-primary-foreground" />
-              </div>
-              <div>
-                <h1 className="text-xl">Edit Question</h1>
-                <p className="text-sm text-muted-foreground">
-                  Modify question details and content
-                </p>
-              </div>
-            </div>
+    <Card className="p-4">
+      <CardHeader>
+        <CardTitle>Edit Question</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <label>Course Name</label>
+        <Input
+          value={courseName}
+          onChange={(e) => setCourseName(e.target.value)}
+        />
+
+        <label>Course Code</label>
+        <Input
+          value={courseCode}
+          onChange={(e) => setCourseCode(e.target.value)}
+        />
+
+        <label>Difficulty</label>
+        <Input
+          value={difficulty}
+          onChange={(e) => setDifficulty(e.target.value)}
+        />
+
+        <label>Question Type</label>
+        <Input
+          value={questionType}
+          onChange={(e) => setQuestionType(e.target.value)}
+        />
+
+        <label>Assessment Type</label>
+        <Input
+          value={assessmentType}
+          onChange={(e) => setAssessmentType(e.target.value)}
+        />
+
+        <label>Question Text</label>
+        <Textarea
+          value={questionText}
+          onChange={(e) => setQuestionText(e.target.value)}
+        />
+
+        <label>Explanation</label>
+        <Textarea
+          value={explanation}
+          onChange={(e) => setExplanation(e.target.value)}
+        />
+
+        <label>Points</label>
+        <Input
+          type="number"
+          value={points}
+          onChange={(e) => setPoints(Number(e.target.value))}
+        />
+
+        <label>Options</label>
+        {options.map((opt, idx) => (
+          <div key={idx} className="flex space-x-2 items-center">
+            <span>{opt.key}.</span>
+            <Input
+              value={opt.value}
+              onChange={(e) => handleOptionChange(idx, e.target.value)}
+            />
           </div>
+        ))}
+
+        <label>Tags (comma separated)</label>
+        <Input
+          value={tags}
+          onChange={(e) => setTags(e.target.value)}
+        />
+
+        <div className="flex space-x-2 mt-4">
+          <Button onClick={handleSave}>Save</Button>
+          <Button variant="secondary" onClick={onBack}>
+            Cancel
+          </Button>
         </div>
-      </header>
-
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="space-y-6">
-          {/* Basic Information */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Basic Information</CardTitle>
-              <CardDescription>Course and question metadata</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="courseCode">Course Code</Label>
-                  <Input
-                    id="courseCode"
-                    placeholder="e.g., DSA1101"
-                    value={courseCode}
-                    onChange={(e) => setCourseCode(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="courseName">Course Name</Label>
-                  <Input
-                    id="courseName"
-                    placeholder="e.g., Introduction to Data Science"
-                    value={courseName}
-                    onChange={(e) => setCourseName(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="difficulty">Difficulty</Label>
-                  <Select value={difficulty} onValueChange={setDifficulty}>
-                    <SelectTrigger id="difficulty" className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="w-full whitespace-normal overflow-auto">
-                      <SelectItem value="Easy">Easy</SelectItem>
-                      <SelectItem value="Medium">Medium</SelectItem>
-                      <SelectItem value="Hard">Hard</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="questionType">Question Type</Label>
-                  <Select value={questionType} onValueChange={setQuestionType}>
-                    <SelectTrigger id="questionType" className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="w-full whitespace-normal overflow-auto">
-                      <SelectItem value="Multiple Choice">Multiple Choice</SelectItem>
-                      <SelectItem value="True/False">True/False</SelectItem>
-                      <SelectItem value="Short Answer">Short Answer</SelectItem>
-                      <SelectItem value="Essay">Essay</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="tags">Tags (comma-separated)</Label>
-                <Input
-                  id="tags"
-                  placeholder="e.g., Supervised Learning, Data Manipulation"
-                  value={tags}
-                  onChange={(e) => setTags(e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Separate tags with commas for better organization
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Question Content */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Question Content</CardTitle>
-              <CardDescription>The main question and answer options</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="question">Question</Label>
-                <Textarea
-                  id="question"
-                  placeholder="Enter your question here"
-                  value={questionText}
-                  onChange={(e) => setQuestionText(e.target.value)}
-                  rows={4}
-                />
-              </div>
-
-              {/* Options Handling */}
-              {questionType === "Multiple Choice" && (
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <Label>Answer Options</Label>
-                    <Button type="button" variant="outline" size="sm" onClick={addOption}>
-                      <Plus className="h-3 w-3" /> Add Option
-                    </Button>
-                  </div>
-                  {options.map((option, index) => (
-                    <div key={index} className="flex items-center space-x-3">
-                      <div className="flex items-center space-x-2">
-                        <input
-                          type="radio"
-                          name="correct-answer"
-                          checked={correctAnswer === index}
-                          onChange={() => setCorrectAnswer(index)}
-                        />
-                        <span className="text-sm w-6">{String.fromCharCode(65 + index)}.</span>
-                      </div>
-                      <Input
-                        placeholder={`Option ${String.fromCharCode(65 + index)}`}
-                        value={option}
-                        onChange={(e) => updateOption(index, e.target.value)}
-                        className="flex-1"
-                      />
-                      {correctAnswer === index && (
-                        <Badge className="bg-green-100 text-green-800">Correct</Badge>
-                      )}
-                      {options.length > 2 && (
-                        <Button type="button" variant="ghost" size="sm" onClick={() => removeOption(index)}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </div>
-                  ))}
-                  <p className="text-xs text-muted-foreground">
-                    Select the radio button next to the correct answer
-                  </p>
-                </div>
-              )}
-
-              {questionType === "True/False" && (
-                <div className="space-y-2">
-                  <Label>Correct Answer</Label>
-                  <div className="flex space-x-3">
-                    <div className="flex items-center space-x-2">
-                      <input type="radio" checked={correctAnswer === 0} onChange={() => setCorrectAnswer(0)} />
-                      <span>True</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <input type="radio" checked={correctAnswer === 1} onChange={() => setCorrectAnswer(1)} />
-                      <span>False</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {(questionType === "Short Answer" || questionType === "Essay") && (
-                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                  <p className="text-sm text-blue-800">
-                    {questionType === "Short Answer"
-                      ? "Short answer questions require manual grading."
-                      : "Essay questions require manual grading."}
-                  </p>
-                </div>
-              )}
-
-              <div className="space-y-2">
-                <Label htmlFor="explanation">
-                  {questionType === "Multiple Choice" || questionType === "True/False"
-                    ? "Explanation (Optional)"
-                    : "Grading Guidelines (Optional)"}
-                </Label>
-                <Textarea
-                  id="explanation"
-                  placeholder={
-                    questionType === "Multiple Choice" || questionType === "True/False"
-                      ? "Explain why this is the correct answer"
-                      : "Provide guidelines for grading this answer"
-                  }
-                  value={explanation}
-                  onChange={(e) => setExplanation(e.target.value)}
-                  rows={3}
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Action Buttons */}
-          <div className="flex justify-end space-x-4">
-            <Button variant="outline" onClick={onBack}>
-              Cancel
-            </Button>
-            <Button onClick={handleSave} disabled={!isValid} className="flex items-center space-x-2">
-              <Save className="h-4 w-4" />
-              <span>Save Changes</span>
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }

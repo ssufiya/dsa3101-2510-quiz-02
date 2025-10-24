@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/card";
 import { Input } from "../components/input";
 import { Button } from "../components/button";
@@ -177,12 +177,12 @@ export function QuestionLibrary({ onBack, onQuestionDetails, onAddToCart, cartQu
       setLoading(true);
       const response = await axios.get("http://localhost:5003/api/questions/", {
         params: {
-          difficulty: selectedDifficulties.length ? selectedDifficulties.join(",") : null,
-          type: selectedTypes.length ? selectedTypes.join(",") : null,
-          subject: selectedCourses.length ? selectedCourses.join(",") : null,
-          semester: selectedSemesters.length ? selectedSemesters.join(",") : null,
-          topic: searchTerm || null,
-          match: matchMode || null,
+          difficulty: selectedDifficulties.length ? selectedDifficulties.join(",") : undefined,
+          type: selectedTypes.length ? selectedTypes.join(",") : undefined,
+          subject: selectedCourses.length ? selectedCourses.join(",") : undefined,
+          semester: selectedSemesters.length ? selectedSemesters.join(",") : undefined,
+          topic: searchTerm || undefined,
+          match: matchMode || undefined,
           fuzzy: true,
           is_latest: true,
         },
@@ -194,6 +194,11 @@ export function QuestionLibrary({ onBack, onQuestionDetails, onAddToCart, cartQu
       setLoading(false);
     }
   };
+
+  // <<< NEW: fetch all questions on page load
+  useEffect(() => {
+    fetchQuestions();
+  }, []);
 
   const isInCart = (id) => cartQuestions.some((q) => q.question_id === id);
 
@@ -243,7 +248,6 @@ export function QuestionLibrary({ onBack, onQuestionDetails, onAddToCart, cartQu
           <MultiSelectDropdown label="Select Course" options={courses} selected={selectedCourses} setSelected={setSelectedCourses} />
           <MultiSelectDropdown label="Select Semester" options={semesters} selected={selectedSemesters} setSelected={setSelectedSemesters} />
           <SingleSelectDropdown label="Select Match Mode" options={matches} selected={matchMode} setSelected={setMatchMode} />
-          
 
           <Button onClick={fetchQuestions} className="ml-2">Filter</Button>
         </div>
