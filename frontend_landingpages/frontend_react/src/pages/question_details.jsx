@@ -29,6 +29,7 @@ export function QuestionDetails({
   const [expandedIndices, setExpandedIndices] = useState([]);
   const [isEditing, setIsEditing] = useState(false);
 
+  // Fetch question details
   useEffect(() => {
     const fetchQuestionData = async () => {
       try {
@@ -44,6 +45,7 @@ export function QuestionDetails({
     if (questionId) fetchQuestionData();
   }, [questionId]);
 
+  // Fetch similar questions
   useEffect(() => {
     const fetchSimilarQuestions = async () => {
       try {
@@ -73,6 +75,7 @@ export function QuestionDetails({
     if (questionId) fetchSimilarQuestions();
   }, [questionId]);
 
+  // Fetch change history
   useEffect(() => {
     const fetchChangeHistory = async () => {
       try {
@@ -290,9 +293,7 @@ export function QuestionDetails({
                   disabled={isInCart(questionData.question_id)}
                 >
                   <Plus className="h-4 w-4 mr-1" />
-                  {isInCart(questionData.question_id)
-                    ? "Added to Preview"
-                    : "Add to Preview"}
+                  {isInCart(questionData.question_id) ? "Added to Cart" : "Add to Cart"}
                 </Button>
               </div>
             </Card>
@@ -383,7 +384,7 @@ export function QuestionDetails({
                         </Button>
                         <Button size="sm" className="flex-1" onClick={() => handleAddToCart(q)} disabled={isInCart(q.question_id)}>
                           <Plus className="h-4 w-4 mr-1" />
-                          {isInCart(q.question_id) ? "Added to Preview" : "Add to Preview"}
+                          {isInCart(q.question_id) ? "Added to Cart" : "Add to Cart"}
                         </Button>
                       </div>
                     </Card>
