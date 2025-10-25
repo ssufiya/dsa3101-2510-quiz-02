@@ -4,7 +4,6 @@
   "version": "0.0.0",
   "type": "module",
   "proxy": "http://localhost:8000",
-
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -21,6 +20,8 @@
     "axios": "^1.12.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "jspdf": "^3.0.3",
+    "jspdf-autotable": "^5.0.2",
     "lucide-react": "^0.544.0",
     "package.json": "^2.0.1",
     "papaparse": "^5.5.3",

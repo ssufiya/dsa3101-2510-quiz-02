@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/card";
 import { Button } from "../components/button";
 import { ArrowLeft, Trash2 } from "lucide-react";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 export function QuestionCart({ onBack, onBackToLibrary, onBackToDetails, questions, onRemoveQuestion }) {
   const [localQuestions, setLocalQuestions] = useState([]);
@@ -26,6 +28,84 @@ export function QuestionCart({ onBack, onBackToLibrary, onBackToDetails, questio
     }
   };
 
+  //export in pdf format
+
+  const handleExportPDF = () => {
+  console.log("Exporting PDF...");
+  const doc = new jsPDF({
+    orientation: "portrait",
+    unit: "mm",
+    format: "a4",
+  });
+
+  if (localQuestions.length === 0) {
+    alert("No questions to export!");
+    return;
+  }
+
+  // 🏫 Header
+  const firstQuestion = localQuestions[0];
+  const courseCode = firstQuestion.course_code || "N/A";
+  const courseName = firstQuestion.course_name || "N/A";
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(14);
+  doc.text("National University of Singapore", 105, 15, { align: "center" });
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(12);
+  doc.text(`Course Code: ${courseCode}`, 14, 30);
+  doc.text(`Course Name: ${courseName}`, 14, 38);
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(13);
+  doc.text("Question Paper", 14, 50);
+
+  // ✏️ Start listing questions
+  let yPosition = 65;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(11);
+
+  localQuestions.forEach((q, index) => {
+    let questionText = `${index + 1}. ${q.question_text || "N/A"}`;
+    const questionType = q.question_type?.toLowerCase() || "short";
+
+    // For True/False questions
+    if (questionType === "truefalse" || questionType === "true/false") {
+      questionText += "  (True / False)";
+    }
+
+    // Wrap question text
+    const splitText = doc.splitTextToSize(questionText, 180);
+    doc.text(splitText, 14, yPosition);
+    yPosition += splitText.length * 7;
+
+    // Add MCQ options if available
+    if (questionType === "mcq" && q.options?.length > 0) {
+      q.options.forEach((option, i) => {
+        const optionLabel = String.fromCharCode(65 + i); // A, B, C, D...
+        const optionText = `${optionLabel}. ${option}`;
+        const splitOption = doc.splitTextToSize(optionText, 170);
+        doc.text(splitOption, 20, yPosition);
+        yPosition += splitOption.length * 6;
+      });
+    }
+
+    // Add some spacing before next question
+    yPosition += 6;
+
+    // Add a new page if reaching the bottom
+    if (yPosition > 270) {
+      doc.addPage();
+      yPosition = 20;
+    }
+  });
+
+  //  Save file
+  const filename = `${courseCode}_question_paper.pdf`;
+  doc.save(filename);
+};
+
   return (
     <div className="p-6 space-y-4 min-h-screen bg-gray-50">
       {/* Navigation Buttons */}
@@ -49,6 +129,7 @@ export function QuestionCart({ onBack, onBackToLibrary, onBackToDetails, questio
       </div>
 
       <h2 className="text-xl font-bold mt-4">Preview Selected Questions</h2>
+
 
       {localQuestions.length === 0 ? (
         <p className="text-gray-500 mt-4">No questions in your cart yet.</p>
@@ -98,8 +179,15 @@ export function QuestionCart({ onBack, onBackToLibrary, onBackToDetails, questio
               </CardContent>
             </Card>
           ))}
+          <button
+            onClick={handleExportPDF}
+            className="mt-2 bg-blue-600 text-white px-3 py-2 rounded"
+            >
+            Export to PDF
+          </button>
         </div>
       )}
-    </div>
+
+    </div>   
   );
 }
