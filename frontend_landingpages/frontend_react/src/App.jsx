@@ -6,7 +6,7 @@ import { UploadCSV } from './pages/uploadcsv.jsx';
 import { QuestionLibrary } from './pages/question_library.jsx';
 import { QuestionDetails } from './pages/question_details.jsx';
 import { QuestionCart } from './pages/question_cart.jsx';
-import { EditQuestion } from './pages/edit_question.jsx';
+import EditQuestion from './pages/edit_question.jsx';
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState("login"); // "login", "dashboard", "upload", etc.
@@ -79,6 +79,9 @@ export default function App() {
         onBack={goToDashboard}
         onQuestionDetails={goToQuestionDetails}
         questionData={questionLibraryData}
+        onGoToQuestionCart={goToQuestionCart}
+        onAddToCart={addToCart}
+        cartQuestions={cartQuestions}
       />
     );
   }

@@ -1,10 +1,10 @@
 """
 API routes for Questions
 """
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Body
 from sqlalchemy.orm import Session
 from sqlalchemy import text 
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 from rapidfuzz import fuzz
 from difflib import HtmlDiff, unified_diff, SequenceMatcher
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -14,10 +14,19 @@ from app.db import get_db
 from app.utils.file_parser import parse_csv, parse_csv_for_version
 from app.utils.validation import validate_question_data
 from pathlib import Path
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+from psycopg2.extras import RealDictCursor
+import psycopg2
 import shutil
 import subprocess
 import pandas as pd 
 import io
+import os
+import zipfile
+import csv
+import tempfile
+from datetime import datetime
 
 
 router = APIRouter()
@@ -541,186 +550,464 @@ async def upload_new_version(
 
 
 # API #5: Uploading a NEW Quiz/Question
+# Configuration
+BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+STORAGE_PNG_PATH = BACKEND_ROOT / "quizbank-db" / "storage" / "png"
+UPLOADS_BASE_PATH = BACKEND_ROOT / "quizbank-db" / "uploads"
+INGEST_SCRIPT = BACKEND_ROOT / "quizbank-db" / "scripts" / "ingest_uploads.sh"
 
-def validate_question_data(question: dict):
-    """Check required fields; returns list of error strings"""
-    errors = []
-    if not question.get("question_text"):
-        errors.append("Missing required field; question_text")
-    if not question.get("difficulty"):
-        errors.append("Missing required field; difficulty")
-    if not question.get("concepts"):
-        errors.append("Missing required field; concepts")
-    return errors
+# Ensure directories exist
+STORAGE_PNG_PATH.mkdir(parents=True, exist_ok=True)
+UPLOADS_BASE_PATH.mkdir(parents=True, exist_ok=True)
 
+# Database connection helper
+def get_db_connection():
+    """Get database connection - adjust credentials as needed"""
+    return psycopg2.connect(
+        dbname=os.getenv("DB_NAME", "quizbank"),
+        user=os.getenv("DB_USER", "postgres"),
+        password=os.getenv("DB_PASSWORD", ""),
+        host=os.getenv("DB_HOST", "localhost"),
+        port=os.getenv("DB_PORT", "5432")
+    )
 
-def parse_csv(csv_bytes: bytes):
-    """Parse CSV bytes into list of dicts"""
-    df = pd.read_csv(io.BytesIO(csv_bytes))
-    df.columns = [col.strip().lower().replace(" ", "_") for col in df.columns]
-    return df.to_dict(orient="records")
+# Pydantic models
+class QuestionPreview(BaseModel):
+    question_number: Optional[int]
+    sub_question_number: Optional[int]
+    question_text: str
+    question_type: str
+    option_a: Optional[str] = None
+    option_b: Optional[str] = None
+    option_c: Optional[str] = None
+    option_d: Optional[str] = None
+    option_e: Optional[str] = None
+    correct_answer: Optional[str] = None
+    explanation: Optional[str] = None
+    points: Optional[float] = None
+    difficulty: str
+    concepts: str
+    attachment: Optional[str] = None
+    context_id: Optional[str] = None
 
-@router.post("/upload")
-async def upload_new_questions(
-    file: UploadFile = File(...),
-    user_id: int = None,  # optional
-    db: Session = Depends(get_db)
-):
+class ContextPreview(BaseModel):
+    context_id: str
+    context_text: str
+    attachment: Optional[str] = None
+
+class UploadPreviewResponse(BaseModel):
+    upload_id: str
+    questions: List[QuestionPreview]
+    contexts: List[ContextPreview]
+    attachments: List[str]
+    course_code: Optional[str] = None
+    assessment_type: Optional[str] = None
+    academic_year: Optional[str] = None
+    semester: Optional[str] = None
+
+class ConfirmUploadRequest(BaseModel):
+    upload_id: str
+    course_code: str
+    assessment_type: str
+    academic_year: Optional[str] = None
+    semester: Optional[str] = None
+
+# Temporary storage for pending uploads
+pending_uploads: Dict[str, Dict] = {}
+
+def parse_csv_to_dict(csv_path: Path) -> List[Dict]:
+    """Parse CSV file and return list of dictionaries"""
+    with open(csv_path, 'r', encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        return [row for row in reader]
+
+def validate_questions_csv(questions: List[Dict]) -> Tuple[bool, Optional[str]]:
+    """Validate questions CSV data"""
+    required_fields = ['Question Text', 'Question Type', 'Difficulty', 'Concepts']
+    
+    for idx, q in enumerate(questions, 1):
+        for field in required_fields:
+            if field not in q or not q[field].strip():
+                return False, f"Row {idx}: Missing required field '{field}'"
+        
+        # If Question Number is present, it must be valid
+        if 'Question Number' in q and q['Question Number'].strip():
+            try:
+                int(q['Question Number'])
+            except ValueError:
+                return False, f"Row {idx}: Invalid Question Number"
+    
+    return True, None
+
+def validate_context_csv(contexts: List[Dict]) -> Tuple[bool, Optional[str]]:
+    """Validate context CSV data"""
+    for idx, ctx in enumerate(contexts, 1):
+        context_id = ctx.get('Context ID', '').strip()
+        context_text = ctx.get('Context Text', '').strip()
+        
+        # If Context ID is present, Context Text must be present and vice versa
+        if bool(context_id) != bool(context_text):
+            return False, f"Row {idx}: Context ID and Context Text must both be present or both be absent"
+        
+        if context_id:
+            try:
+                int(context_id)
+            except ValueError:
+                return False, f"Row {idx}: Context ID must be an integer"
+    
+    return True, None
+
+def extract_metadata_from_filename(filename: str) -> Dict[str, Optional[str]]:
+    """Extract course code, assessment type, etc. from filename"""
+    # Example: DSA1101_Sem1_2425_Midterm_questions.csv
+    parts = filename.replace('.csv', '').split('_')
+    
+    metadata = {
+        'course_code': None,
+        'assessment_type': None,
+        'academic_year': None,
+        'semester': None
+    }
+    
+    if len(parts) >= 1:
+        metadata['course_code'] = parts[0]
+    
+    # Look for semester pattern
+    for part in parts:
+        if part.lower().startswith('sem'):
+            metadata['semester'] = part
+    
+    # Look for academic year (e.g., 2425)
+    for part in parts:
+        if part.isdigit() and len(part) == 4:
+            metadata['academic_year'] = f"20{part[:2]}/20{part[2:]}"
+    
+    # Assessment type is usually the part before 'questions' or 'context'
+    for i, part in enumerate(parts):
+        if part.lower() in ['questions', 'context']:
+            if i > 0:
+                metadata['assessment_type'] = parts[i-1]
+            break
+    
+    return metadata
+
+@router.post("/upload", response_model=UploadPreviewResponse)
+async def upload_assessment(file: UploadFile = File(...)):
+    """
+    Step 1-3: Upload CSV or ZIP, parse files, return preview
+    """
+    upload_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+    temp_dir = Path(tempfile.mkdtemp())
+    
     try:
-        if not file.filename.endswith(".csv"):
-            raise HTTPException(status_code=400, detail="Only CSV files are allowed")
-
-        contents = await file.read()
-
-        # ===== STEP 0: PARSE COURSE CODE FROM FILENAME =====
-        filename = Path(file.filename).name
-        course_code = filename.split("_")[0]
-
-        result = db.execute(
-            text("SELECT course_id, course_name FROM courses WHERE course_code = :code LIMIT 1"),
-            {"code": course_code}
-        )
-        course_row = result.fetchone()
-        if not course_row:
-            raise HTTPException(status_code=400, detail=f"Course code '{course_code}' not found in database")
-        course_id, course_name = course_row
-
-        # ===== STEP 1: READ CSV =====
-        df = None
-        for enc in ['utf-8', 'latin1', 'iso-8859-1', 'windows-1252', 'cp1252']:
-            try:
-                df = pd.read_csv(io.BytesIO(contents), encoding=enc)
-                break
-            except UnicodeDecodeError:
-                continue
-        if df is None:
-            raise HTTPException(status_code=400, detail="Unable to decode CSV file")
-
-        df.columns = [col.strip().lower().replace(" ", "_") for col in df.columns]
-        questions_data = df.to_dict(orient="records")
-
-        # ===== STEP 2: SAVE CSV TO DATA FOLDER =====
-        data_dir = Path(__file__).parent.parent.parent.parent / "quizbank-db" / "db-init" / "data"
-        data_dir.mkdir(parents=True, exist_ok=True)
-        dest_file_path = data_dir / file.filename
-        if dest_file_path.exists():
-            raise HTTPException(status_code=400, detail=f"File {file.filename} already exists")
-        with open(dest_file_path, "wb") as f:
-            f.write(contents)
-
-        # ===== STEP 3: INSERT QUESTIONS =====
-        inserted_count = 0
-        inserted_questions = []
-        errors = []
-
-        for idx, question in enumerate(questions_data, 1):
-            try:
-                # Validate
-                validation_errors = validate_question_data(question)
-                if validation_errors:
-                    errors.append({
-                        "row": idx,
-                        "question": question.get("question_text", "N/A")[:50],
-                        "error": validation_errors
-                    })
-                    continue
-
-                # Determine created_by safely
-                created_by_id = None
-                if user_id:
-                    res = db.execute(text("SELECT user_id FROM users WHERE user_id = :uid"), {"uid": user_id})
-                    if res.fetchone():
-                        created_by_id = user_id
-
-                # Build insert query
-                fields = ["question_text", "difficulty", "concepts", "course_id", "version_number"]
-                values = [":question_text", ":difficulty", ":concepts", ":course_id", "1"]
-                params = {
-                    "question_text": question.get("question_text"),
-                    "difficulty": question.get("difficulty"),
-                    "concepts": question.get("concepts"),
-                    "course_id": course_id
-                }
-
-                if created_by_id:
-                    fields.append("created_by")
-                    values.append(":created_by")
-                    params["created_by"] = created_by_id
-
-                for field in ["correct_answer", "option_a", "option_b", "option_c", "option_d", "option_e",
-                              "explanation", "points", "question_number", "sub_question_number", "question_type", "context"]:
-                    if question.get(field) is not None:
-                        fields.append(field)
-                        values.append(f":{field}")
-                        params[field] = question.get(field)
-
-                query = f"INSERT INTO questions ({', '.join(fields)}) VALUES ({', '.join(values)})"
-                db.execute(text(query), params)
-                inserted_count += 1
-
-                # ← Store the inserted question details for preview
-                question_preview = {
-                    "question_text": question.get("question_text"),
-                    "question_type": question.get("question_type"),
-                    "difficulty": question.get("difficulty"),
-                    "concepts": question.get("concepts"),
-                    "correct_answer": question.get("correct_answer"),
-                    "option_a": question.get("option_a"),
-                    "option_b": question.get("option_b"),
-                    "option_c": question.get("option_c"),
-                    "option_d": question.get("option_d"),
-                    "option_e": question.get("option_e"),
-                    "explanation": question.get("explanation"),
-                    "points": question.get("points"),
-                    "question_number": question.get("question_number"),
-                    "sub_question_number": question.get("sub_question_number")
-                }
-                # Replace NaN with None for JSON serialization
-                import math
-                question_preview = {
-                    k: (None if isinstance(v, float) and math.isnan(v) else v)
-                    for k, v in question_preview.items()
-                }
-                inserted_questions.append(question_preview)
-
-
-            except Exception as e:
-                errors.append({
-                    "row": idx,
-                    "question": question.get("question_text", "N/A")[:50],
-                    "error": str(e)
-                })
-                continue
-
-        if inserted_count > 0:
-            db.commit()
-            return {
-                "success": True,
-                "message": f"File saved and {inserted_count} questions loaded successfully",
-                "file_path": str(dest_file_path),
-                "questions_loaded": inserted_count,
-                "uploaded_questions": inserted_questions,
-                "error_count": len(errors),
-                "errors": errors if errors else None
-            }
+        # Save uploaded file
+        file_path = temp_dir / file.filename
+        with open(file_path, 'wb') as f:
+            content = await file.read()
+            f.write(content)
+        
+        questions_data = []
+        contexts_data = []
+        attachments = []
+        questions_csv_path = None
+        context_csv_path = None
+        metadata = {}
+        
+        # Handle ZIP file
+        if file.filename.endswith('.zip'):
+            with zipfile.ZipFile(file_path, 'r') as zip_ref:
+                zip_ref.extractall(temp_dir)
+            
+            # Find CSV files
+            for csv_file in temp_dir.rglob('*.csv'):
+                if 'questions' in csv_file.name.lower():
+                    questions_csv_path = csv_file
+                    metadata = extract_metadata_from_filename(csv_file.name)
+                elif 'context' in csv_file.name.lower():
+                    context_csv_path = csv_file
+            
+            # Find attachments
+            for ext in ['*.png', '*.jpg', '*.jpeg', '*.pdf', '*.r', '*.R']:
+                attachments.extend([f.name for f in temp_dir.rglob(ext)])
+        
+        # Handle single CSV file
+        elif file.filename.endswith('.csv'):
+            if 'questions' not in file.filename.lower():
+                raise HTTPException(
+                    status_code=400, 
+                    detail="Single CSV file must be questions.csv"
+                )
+            questions_csv_path = file_path
+            metadata = extract_metadata_from_filename(file.filename)
         else:
-            db.rollback()
-            return {
-                "success": False,
-                "message": "File saved but no questions were loaded. Check errors for details.",
-                "file_path": str(dest_file_path),
-                "questions_loaded": 0,
-                "uploaded_questions": [],
-                "error_count": len(errors),
-                "errors": errors
-            }
-
-    except HTTPException:
-        raise
+            raise HTTPException(
+                status_code=400,
+                detail="File must be CSV or ZIP"
+            )
+        
+        # Validate questions CSV exists
+        if not questions_csv_path or not questions_csv_path.exists():
+            raise HTTPException(
+                status_code=400,
+                detail="questions.csv not found in upload"
+            )
+        
+        # Parse questions CSV
+        questions_data = parse_csv_to_dict(questions_csv_path)
+        is_valid, error_msg = validate_questions_csv(questions_data)
+        if not is_valid:
+            raise HTTPException(status_code=400, detail=f"Invalid questions.csv: {error_msg}")
+        
+        # Parse context CSV if exists
+        if context_csv_path and context_csv_path.exists():
+            contexts_data = parse_csv_to_dict(context_csv_path)
+            is_valid, error_msg = validate_context_csv(contexts_data)
+            if not is_valid:
+                raise HTTPException(status_code=400, detail=f"Invalid context.csv: {error_msg}")
+        
+        # Convert to preview models
+        questions_preview = [
+            QuestionPreview(
+                question_number=int(q.get('Question Number', 0)) if q.get('Question Number', '').strip() else None,
+                sub_question_number=int(q.get('Sub-Question Number', 0)) if q.get('Sub-Question Number', '').strip() else None,
+                question_text=q['Question Text'],
+                question_type=q['Question Type'],
+                option_a=q.get('Option A') or None,
+                option_b=q.get('Option B') or None,
+                option_c=q.get('Option C') or None,
+                option_d=q.get('Option D') or None,
+                option_e=q.get('Option E') or None,
+                correct_answer=q.get('Correct Answer') or None,
+                explanation=q.get('Explanation') or None,
+                points=float(q['Points']) if q.get('Points', '').strip() else None,
+                difficulty=q['Difficulty'],
+                concepts=q['Concepts'],
+                attachment=q.get('Attachment') or None,
+                context_id=q.get('Context ID') or None
+            )
+            for q in questions_data
+        ]
+        
+        contexts_preview = [
+            ContextPreview(
+                context_id=c['Context ID'],
+                context_text=c['Context Text'],
+                attachment=c.get('Attachment') or None
+            )
+            for c in contexts_data
+            if c.get('Context ID', '').strip()
+        ]
+        
+        # Store in temporary cache
+        pending_uploads[upload_id] = {
+            'temp_dir': str(temp_dir),
+            'questions_data': questions_data,
+            'contexts_data': contexts_data,
+            'attachments': attachments,
+            'metadata': metadata
+        }
+        
+        return UploadPreviewResponse(
+            upload_id=upload_id,
+            questions=questions_preview,
+            contexts=contexts_preview,
+            attachments=attachments,
+            course_code=metadata.get('course_code'),
+            assessment_type=metadata.get('assessment_type'),
+            academic_year=metadata.get('academic_year'),
+            semester=metadata.get('semester')
+        )
+    
     except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to upload questions: {str(e)}")
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/confirm-upload")
+async def confirm_upload(request: ConfirmUploadRequest):
+    """
+    Step 4-9: Process confirmed upload, map data, store in DB, backup
+    """
+    if request.upload_id not in pending_uploads:
+        raise HTTPException(status_code=404, detail="Upload not found or expired")
+    
+    upload_data = pending_uploads[request.upload_id]
+    temp_dir = Path(upload_data['temp_dir'])
+    
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # Get or create course
+        cur.execute(
+            "SELECT course_id FROM courses WHERE course_code = %s",
+            (request.course_code,)
+        )
+        course_result = cur.fetchone()
+        
+        if course_result:
+            course_id = course_result['course_id']
+        else:
+            cur.execute(
+                "INSERT INTO courses (course_code, course_name) VALUES (%s, %s) RETURNING course_id",
+                (request.course_code, request.course_code)  # Use course_code as name if not provided
+            )
+            course_id = cur.fetchone()['course_id']
+        
+        # Create assessment
+        cur.execute(
+            """
+            INSERT INTO assessments (course_id, assessment_type, assessment_acadyear, assessment_semester)
+            VALUES (%s, %s, %s, %s)
+            RETURNING assessment_id
+            """,
+            (course_id, request.assessment_type, request.academic_year, request.semester)
+        )
+        assessment_id = cur.fetchone()['assessment_id']
+        
+        # Map contexts
+        context_map = {}  # Maps local context_id to DB context_id
+        
+        for ctx in upload_data['contexts_data']:
+            context_local_id = ctx.get('Context ID', '').strip()
+            if not context_local_id:
+                continue
+            
+            cur.execute(
+                """
+                INSERT INTO contexts (assessment_id, course_id, context_local_id, context_text)
+                VALUES (%s, %s, %s, %s)
+                RETURNING context_id
+                """,
+                (assessment_id, course_id, context_local_id, ctx['Context Text'])
+            )
+            db_context_id = cur.fetchone()['context_id']
+            context_map[context_local_id] = db_context_id
+            
+            # Handle context attachments
+            attachment_str = ctx.get('Attachment', '').strip()
+            if attachment_str:
+                attachment_names = [a.strip() for a in attachment_str.split(',')]
+                for att_name in attachment_names:
+                    cur.execute(
+                        """
+                        INSERT INTO context_attachments (context_id, attachment_name, attachment_url)
+                        VALUES (%s, %s, %s)
+                        """,
+                        (db_context_id, att_name, f"/storage/png/{att_name}")
+                    )
+        
+        # Insert questions
+        for q in upload_data['questions_data']:
+            context_local_id = q.get('Context ID', '').strip()
+            db_context_id = context_map.get(context_local_id) if context_local_id else None
+            
+            cur.execute(
+                """
+                INSERT INTO questions (
+                    assessment_id, course_id, context_id, question_number, sub_question_number,
+                    question_text, question_type, option_a, option_b, option_c, option_d, option_e,
+                    correct_answer, explanation, points, difficulty, concepts
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING question_id
+                """,
+                (
+                    assessment_id, course_id, db_context_id,
+                    int(q['Question Number']) if q.get('Question Number', '').strip() else None,
+                    int(q['Sub-Question Number']) if q.get('Sub-Question Number', '').strip() else None,
+                    q['Question Text'], q['Question Type'],
+                    q.get('Option A') or None, q.get('Option B') or None,
+                    q.get('Option C') or None, q.get('Option D') or None, q.get('Option E') or None,
+                    q.get('Correct Answer') or None, q.get('Explanation') or None,
+                    float(q['Points']) if q.get('Points', '').strip() else None,
+                    q['Difficulty'], q['Concepts']
+                )
+            )
+            question_id = cur.fetchone()['question_id']
+            
+            # Handle question attachments
+            attachment_str = q.get('Attachment', '').strip()
+            if attachment_str:
+                attachment_names = [a.strip() for a in attachment_str.split(',')]
+                for att_name in attachment_names:
+                    cur.execute(
+                        """
+                        INSERT INTO question_attachments (question_id, attachment_name, attachment_url)
+                        VALUES (%s, %s, %s)
+                        """,
+                        (question_id, att_name, f"/storage/png/{att_name}")
+                    )
+        
+        conn.commit()
+        
+        # Copy attachments to storage
+        for attachment in upload_data['attachments']:
+            for src_file in temp_dir.rglob(attachment):
+                dest_file = STORAGE_PNG_PATH / attachment
+                shutil.copy2(src_file, dest_file)
+                break
+        
+        # Create dated upload folder for ingest script
+        dated_folder = UPLOADS_BASE_PATH / datetime.now().strftime("%Y-%m-%d_%H%M%S")
+        dated_folder.mkdir(parents=True, exist_ok=True)
+        
+        # Copy CSV files to dated folder
+        for csv_file in temp_dir.rglob('*.csv'):
+            shutil.copy2(csv_file, dated_folder / csv_file.name)
+        
+        # Copy attachments to dated folder
+        if upload_data['attachments']:
+            images_dir = dated_folder / "images"
+            images_dir.mkdir(exist_ok=True)
+            for attachment in upload_data['attachments']:
+                for src_file in temp_dir.rglob(attachment):
+                    shutil.copy2(src_file, images_dir / attachment)
+                    break
+        
+        # Run backup via ingest script if it exists
+        if INGEST_SCRIPT.exists():
+            try:
+                subprocess.run(
+                    [str(INGEST_SCRIPT), str(dated_folder)],
+                    check=True,
+                    capture_output=True,
+                    text=True
+                )
+            except subprocess.CalledProcessError as e:
+                print(f"Warning: Backup script failed: {e.stderr}")
+        
+        # Cleanup
+        cur.close()
+        conn.close()
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        del pending_uploads[request.upload_id]
+        
+        return JSONResponse(content={
+            "message": "Upload successful",
+            "assessment_id": assessment_id,
+            "course_id": course_id
+        })
+    
+    except Exception as e:
+        if 'conn' in locals():
+            conn.rollback()
+            conn.close()
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/cancel-upload/{upload_id}")
+async def cancel_upload(upload_id: str):
+    """Cancel a pending upload and cleanup temporary files"""
+    if upload_id not in pending_uploads:
+        raise HTTPException(status_code=404, detail="Upload not found")
+    
+    upload_data = pending_uploads[upload_id]
+    temp_dir = Path(upload_data['temp_dir'])
+    
+    shutil.rmtree(temp_dir, ignore_errors=True)
+    del pending_uploads[upload_id]
+    
+    return JSONResponse(content={"message": "Upload cancelled"})
 
 # API #6: Version Diff 
 def highlight_changes(old_text: str, new_text: str) -> Dict[str, str]:
