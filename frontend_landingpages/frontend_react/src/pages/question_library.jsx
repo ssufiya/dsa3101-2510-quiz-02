@@ -146,7 +146,7 @@ function QuestionCard({ question, onQuestionDetails, onAddToCart, isInCart }) {
               disabled={isInCart(question.question_id)}
             >
               <Plus className="h-4 w-4 mr-1" />
-              {isInCart(question.question_id) ? "Added to Preview" : "Add to Preview"}
+              {isInCart(question.question_id) ? "Added to Cart" : "Add to Cart"}
             </Button>
           </div>
         </div>

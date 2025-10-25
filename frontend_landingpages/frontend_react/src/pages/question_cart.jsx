@@ -128,7 +128,7 @@ export function QuestionCart({ onBack, onBackToLibrary, onBackToDetails, questio
         )}
       </div>
 
-      <h2 className="text-xl font-bold mt-4">Preview Selected Questions</h2>
+      <h2 className="text-xl font-bold mt-4">Questions Cart</h2>
 
 
       {localQuestions.length === 0 ? (

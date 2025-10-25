@@ -257,7 +257,7 @@ export function QuestionDetails({
                   disabled={isInCart(questionData.question_id)}
                 >
                   <Plus className="h-4 w-4 mr-1" />
-                  {isInCart(questionData.question_id) ? "Added to Preview" : "Add to Preview"}
+                  {isInCart(questionData.question_id) ? "Added to Cart" : "Add to Cart"}
                 </Button>
               </div>
             </Card>
@@ -351,7 +351,7 @@ export function QuestionDetails({
                         </Button>
                         <Button size="sm" className="flex-1" onClick={() => handleAddToCart(q)} disabled={isInCart(q.question_id)}>
                           <Plus className="h-4 w-4 mr-1" />
-                          {isInCart(q.question_id) ? "Added to Preview" : "Add to Preview"}
+                          {isInCart(q.question_id) ? "Added to Cart" : "Add to Cart"}
                         </Button>
                       </div>
                     </Card>
