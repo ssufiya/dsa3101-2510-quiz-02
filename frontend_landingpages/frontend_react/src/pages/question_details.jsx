@@ -1,30 +1,34 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "../components/card";
 import { Button } from "../components/button";
 import { Badge } from "../components/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/tabs";
-import { ArrowLeft, HelpCircle, Eye, Plus, ShoppingBasket, Edit } from "lucide-react";
+import { ArrowLeft, HelpCircle, Eye, Plus, ShoppingBasket, Edit, ChevronDown, ChevronUp } from "lucide-react";
 import EditQuestion from "./edit_question.jsx";
 
-export function QuestionDetails({ 
-  questionId, 
-  onBack = () => {}, 
-  onViewQuestion, 
-  onGoToQuestionCart, 
+export function QuestionDetails({
+  questionId,
+  onBack = () => {},
+  onViewQuestion,
+  onGoToQuestionCart,
   onAddToCart,
-  cartQuestions = []
+  cartQuestions = [],
 }) {
   const [questionData, setQuestionData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [similarQuestions, setSimilarQuestions] = useState([]);
   const [loadingSimilar, setLoadingSimilar] = useState(true);
-  const [usageHistory, setUsageHistory] = useState([]);
   const [changeHistory, setChangeHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
+  const [expandedIndices, setExpandedIndices] = useState([]);
   const [isEditing, setIsEditing] = useState(false);
 
-  // Fetch question details
   useEffect(() => {
     const fetchQuestionData = async () => {
       try {
@@ -40,7 +44,6 @@ export function QuestionDetails({
     if (questionId) fetchQuestionData();
   }, [questionId]);
 
-  // Fetch similar questions
   useEffect(() => {
     const fetchSimilarQuestions = async () => {
       try {
@@ -51,10 +54,12 @@ export function QuestionDetails({
         const suggestedVariants = suggestionsRes.data.suggested_variants || [];
 
         const detailsPromises = suggestedVariants.map((s) =>
-          axios.get(`http://localhost:5003/api/questions/${s.question_id}`).then((res) => ({
-            ...res.data.data,
-            similarity: s.similarity,
-          }))
+          axios
+            .get(`http://localhost:5003/api/questions/${s.question_id}`)
+            .then((res) => ({
+              ...res.data.data,
+              similarity: s.similarity,
+            }))
         );
 
         const details = await Promise.all(detailsPromises);
@@ -68,24 +73,21 @@ export function QuestionDetails({
     if (questionId) fetchSimilarQuestions();
   }, [questionId]);
 
-  // Fetch usage & change history
   useEffect(() => {
-    const fetchHistory = async () => {
+    const fetchChangeHistory = async () => {
       try {
         setLoadingHistory(true);
-        const [usageRes, changeRes] = await Promise.all([
-          axios.get(`http://localhost:5003/api/questions/${questionId}/usage-history`),
-          axios.get(`http://localhost:5003/api/questions/${questionId}/change-history`),
-        ]);
-        setUsageHistory(usageRes.data.usage || []);
+        const changeRes = await axios.get(
+          `http://localhost:5003/api/questions/${questionId}/change-history`
+        );
         setChangeHistory(changeRes.data.changes || []);
       } catch (err) {
-        console.error("Error fetching history:", err);
+        console.error("Error fetching change history:", err);
       } finally {
         setLoadingHistory(false);
       }
     };
-    if (questionId) fetchHistory();
+    if (questionId) fetchChangeHistory();
   }, [questionId]);
 
   const getDifficultyColor = (difficulty) => {
@@ -103,12 +105,52 @@ export function QuestionDetails({
     }
   };
 
+  const formatDateTime = (dateStr) => {
+    try {
+      const date = new Date(dateStr);
+      const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      return date.toLocaleString("en-GB", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+        timeZoneName: "short",
+        timeZone: userTimeZone,
+      });
+    } catch {
+      return dateStr;
+    }
+  };
+
+  const timeAgo = (dateStr) => {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const seconds = Math.floor((now - date) / 1000);
+    if (seconds < 60) return "just now";
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes} minute${minutes !== 1 ? "s" : ""} ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours} hour${hours !== 1 ? "s" : ""} ago`;
+    const days = Math.floor(hours / 24);
+    if (days < 30) return `${days} day${days !== 1 ? "s" : ""} ago`;
+    const months = Math.floor(days / 30);
+    if (months < 12) return `${months} month${months !== 1 ? "s" : ""} ago`;
+    const years = Math.floor(months / 12);
+    return `${years} year${years !== 1 ? "s" : ""} ago`;
+  };
+
+  const toggleExpand = (idx) => {
+    setExpandedIndices((prev) =>
+      prev.includes(idx) ? prev.filter((i) => i !== idx) : [...prev, idx]
+    );
+  };
+
   const isInCart = (id) => cartQuestions.some((q) => q.question_id === id);
 
   const handleAddToCart = (question) => {
-    if (!isInCart(question.question_id) && onAddToCart) {
-      onAddToCart(question);
-    }
+    if (!isInCart(question.question_id) && onAddToCart) onAddToCart(question);
   };
 
   const handleViewDetails = (id) => {
@@ -124,24 +166,21 @@ export function QuestionDetails({
     }
   };
 
-  if (loading) {
+  if (loading)
     return (
       <div className="min-h-screen flex items-center justify-center text-gray-500">
         Loading question details...
       </div>
     );
-  }
 
-  if (!questionData) {
+  if (!questionData)
     return (
       <div className="min-h-screen flex items-center justify-center text-gray-500">
         Question not found.
       </div>
     );
-  }
 
-  // Show edit page if editing
-  if (isEditing) {
+  if (isEditing)
     return (
       <EditQuestion
         questionId={questionId}
@@ -150,7 +189,6 @@ export function QuestionDetails({
         onSave={(updated) => setQuestionData(updated)}
       />
     );
-  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -159,7 +197,11 @@ export function QuestionDetails({
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center h-16 justify-between">
             <div className="flex items-center space-x-4">
-              <Button variant="ghost" onClick={onBack} className="flex items-center space-x-2">
+              <Button
+                variant="ghost"
+                onClick={onBack}
+                className="flex items-center space-x-2"
+              >
                 <ArrowLeft className="h-4 w-4" />
                 <span>Back to Library</span>
               </Button>
@@ -176,7 +218,11 @@ export function QuestionDetails({
               </div>
             </div>
 
-            <Button variant="ghost" onClick={onGoToQuestionCart} className="flex items-center space-x-2">
+            <Button
+              variant="ghost"
+              onClick={onGoToQuestionCart}
+              className="flex items-center space-x-2"
+            >
               <ShoppingBasket className="h-5 w-5" />
               <span>Cart ({cartQuestions.length})</span>
             </Button>
@@ -197,51 +243,39 @@ export function QuestionDetails({
                   </Badge>
                   <span className="font-semibold">{questionData.assessment_type}</span>
                 </div>
-                <Button size="sm" variant="outline" onClick={() => setIsEditing(true)} className="flex items-center space-x-1">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setIsEditing(true)}
+                  className="flex items-center space-x-1"
+                >
                   <Edit className="h-4 w-4" />
                   <span>Edit</span>
                 </Button>
               </CardHeader>
               <CardContent className="space-y-4">
-                {questionData.context?.text && (
-                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-900 whitespace-pre-line">
-                    {questionData.context.text}
-                    {questionData.context.attachments && questionData.context.attachments.length > 0 && (
-                      <ul className="mt-2">
-                        {questionData.context.attachments.map((att, idx) => (
-                          <li key={idx}>
-                            <a href={att.url} target="_blank" rel="noreferrer" className="text-blue-600 underline">
-                              {att.name}
-                            </a>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                )}
                 <div className="text-gray-800 text-base font-medium">{questionData.question_text}</div>
 
-                {/* Options */}
                 {questionData.options && (
                   <ul className="mt-2 space-y-1">
                     {Object.entries(questionData.options).map(([key, value]) => (
                       <li key={key} className="flex items-center space-x-2">
                         <span className="font-semibold">{key}.</span>
                         <span>{value}</span>
-                        {questionData.correct_answer === key && <span className="text-green-600 ml-2">✅</span>}
+                        {questionData.correct_answer === key && (
+                          <span className="text-green-600 ml-2">✅</span>
+                        )}
                       </li>
                     ))}
                   </ul>
                 )}
 
-                {/* Explanation */}
                 {questionData.explanation && (
                   <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-900 whitespace-pre-line">
                     <strong>Explanation:</strong> {questionData.explanation}
                   </div>
                 )}
 
-                {/* Concepts */}
                 {questionData.concepts && questionData.concepts.length > 0 && (
                   <p className="text-sm text-gray-700 mt-3">
                     <strong>Concepts:</strong> {questionData.concepts.join(", ")}
@@ -249,7 +283,6 @@ export function QuestionDetails({
                 )}
               </CardContent>
 
-              {/* Add to Cart */}
               <div className="p-4 border-t border-gray-200 flex justify-end">
                 <Button
                   size="sm"
@@ -257,68 +290,67 @@ export function QuestionDetails({
                   disabled={isInCart(questionData.question_id)}
                 >
                   <Plus className="h-4 w-4 mr-1" />
-                  {isInCart(questionData.question_id) ? "Added to Preview" : "Add to Preview"}
+                  {isInCart(questionData.question_id)
+                    ? "Added to Preview"
+                    : "Add to Preview"}
                 </Button>
               </div>
             </Card>
 
-            {/* Usage & Change History */}
+            {/* Change History */}
             <Card>
               <CardHeader>
-                <CardTitle>Question Analytics & History</CardTitle>
-                <CardDescription>(Detailed usage statistics and modification history)</CardDescription>
+                <CardTitle>Change History</CardTitle>
+                <CardDescription>
+                  (Timestamps shown in your local timezone)
+                </CardDescription>
               </CardHeader>
               <CardContent>
-                <Tabs defaultValue="usage">
-                  <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="usage">Usage History</TabsTrigger>
-                    <TabsTrigger value="changes">Change History</TabsTrigger>
-                  </TabsList>
-
-                  <TabsContent value="usage">
-                    {loadingHistory ? (
-                      <p className="text-sm text-gray-500 mt-2">Loading usage history...</p>
-                    ) : usageHistory.length === 0 ? (
-                      <p className="text-sm text-gray-500 mt-2">No usage history available.</p>
-                    ) : (
-                      <ul className="space-y-4 mt-2">
-                        {usageHistory.map((u, idx) => (
-                          <li key={idx} className="p-3 border border-gray-200 rounded bg-gray-50">
-                            <p className="font-semibold">{u.assessment_name}</p>
-                            <p className="text-sm text-gray-600">
-                              {u.num_students} students • {u.course_code} • {u.instructor}
-                            </p>
-                            <p className="text-xs text-muted-foreground">{u.semester}</p>
-                            <p className="text-xs text-muted-foreground">{u.date}</p>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </TabsContent>
-
-                  <TabsContent value="changes">
-                    {loadingHistory ? (
-                      <p className="text-sm text-gray-500 mt-2">Loading change history...</p>
-                    ) : changeHistory.length === 0 ? (
-                      <p className="text-sm text-gray-500 mt-2">No change history available.</p>
-                    ) : (
-                      <ul className="space-y-4 mt-2">
-                        {changeHistory.map((c, idx) => (
-                          <li key={idx} className="p-3 border border-gray-200 rounded bg-gray-50 space-y-1">
-                            <p className="font-semibold">{c.field}</p>
-                            <p className="text-sm text-gray-600">
-                              by {c.author} • {c.date}
-                            </p>
-                            <div className="text-sm">
-                              <p><strong>Previous:</strong> {c.previous}</p>
-                              <p><strong>New:</strong> {c.new}</p>
+                {loadingHistory ? (
+                  <p className="text-sm text-gray-500 mt-2">Loading change history...</p>
+                ) : changeHistory.length === 0 ? (
+                  <p className="text-sm text-gray-500 mt-2">No change history available.</p>
+                ) : (
+                  <ul className="space-y-4 mt-2">
+                    {changeHistory.map((c, idx) => {
+                      const expanded = expandedIndices.includes(idx);
+                      return (
+                        <li
+                          key={idx}
+                          className="p-3 border border-gray-200 rounded bg-gray-50 space-y-1"
+                        >
+                          <div
+                            className="flex justify-between items-center cursor-pointer"
+                            onClick={() => toggleExpand(idx)}
+                          >
+                            <div>
+                              <p className="font-semibold">{c.field}</p>
+                              <p className="text-sm text-gray-600">
+                                by {c.author} • {formatDateTime(c.date)} ({timeAgo(c.date)})
+                              </p>
                             </div>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </TabsContent>
-                </Tabs>
+                            {expanded ? (
+                              <ChevronUp className="h-4 w-4 text-gray-500" />
+                            ) : (
+                              <ChevronDown className="h-4 w-4 text-gray-500" />
+                            )}
+                          </div>
+
+                          {expanded && (
+                            <div className="text-sm mt-2 border-t pt-2 space-y-1">
+                              <p>
+                                <strong>Previous:</strong> {c.previous}
+                              </p>
+                              <p>
+                                <strong>New:</strong> {c.new}
+                              </p>
+                            </div>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
               </CardContent>
             </Card>
 
@@ -335,16 +367,16 @@ export function QuestionDetails({
                   <p className="text-gray-500">No similar questions found.</p>
                 ) : (
                   similarQuestions.map((q) => (
-                    <Card key={q.question_id} className="p-4 bg-gray-50 border border-gray-200">
+                    <Card
+                      key={q.question_id}
+                      className="p-4 bg-gray-50 border border-gray-200"
+                    >
                       <div className="flex justify-between items-center mb-1">
                         <span className="font-semibold text-sm">{Math.round(q.similarity * 100)}% match</span>
                         <Badge className={getDifficultyColor(q.difficulty)}>{q.difficulty}</Badge>
                       </div>
                       <p className="font-medium">{q.question_text}</p>
                       <p className="text-sm text-muted-foreground mt-1">{q.course_code} - {q.course_name}</p>
-                      {q.concepts && q.concepts.length > 0 && (
-                        <p className="text-sm text-gray-700 mt-2">{q.concepts.join(", ")}</p>
-                      )}
                       <div className="flex space-x-2 pt-3">
                         <Button variant="outline" size="sm" className="flex-1" onClick={() => handleViewDetails(q.question_id)}>
                           <Eye className="h-4 w-4 mr-1" /> View Details

@@ -29,11 +29,14 @@ export default function App() {
   const goToUpload = () => setCurrentScreen("upload");
   const goToDashboard = () => setCurrentScreen("dashboard");
   const goToQuestionLibrary = () => setCurrentScreen("questionlibrary");
+
   const goToQuestionDetails = (questionId) => {
     setSelectedQuestionId(questionId);
     setCurrentScreen("questiondetails");
   };
+
   const goToQuestionCart = () => setCurrentScreen("questioncart");
+
   const goToEditQuestion = (questionId) => {
     setSelectedQuestionId(questionId);
     setCurrentScreen("editquestion");
@@ -71,7 +74,9 @@ export default function App() {
     );
   }
 
-  if (currentScreen === "upload") return <UploadCSV onBack={goToDashboard} />;
+  if (currentScreen === "upload") {
+    return <UploadCSV onBack={goToDashboard} />;
+  }
 
   if (currentScreen === "questionlibrary") {
     return (
@@ -120,6 +125,7 @@ export default function App() {
         onBack={goToDashboard}
         onBackToLibrary={goToQuestionLibrary}
         onBackToDetails={() => goToQuestionDetails(selectedQuestionId)}
+        selectedQuestionId={selectedQuestionId}  
         questions={cartQuestions}
         onRemoveQuestion={removeFromCart}
       />
