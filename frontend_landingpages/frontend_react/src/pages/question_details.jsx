@@ -244,7 +244,7 @@ export function QuestionDetails({
                   <Badge className={getDifficultyColor(questionData.difficulty)}>
                     {questionData.difficulty}
                   </Badge>
-                  <span className="font-semibold">{questionData.assessment_type}</span>
+                  <span className="font-semibold">, {questionData.assessment_type}</span>
                 </div>
                 <Button
                   size="sm"
