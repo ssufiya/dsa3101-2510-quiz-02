@@ -123,13 +123,19 @@ function QuestionCard({ question, onQuestionDetails, onAddToCart, isInCart }) {
       <CardContent>
         <div className="space-y-4">
           <div className="text-sm text-muted-foreground line-clamp-3">{question.question_text}</div>
+          
+          {/* Concepts with commas */}
           {Array.isArray(question.concepts) && question.concepts.length > 0 && (
-            <div className="flex flex-wrap gap-1">
-              {question.concepts.slice(0, 3).map((tag, idx) => (
-                <Badge key={idx} variant="secondary" className="text-xs">{tag.trim()}</Badge>
+            <div className="flex flex-wrap gap-1 items-center">
+              {question.concepts.slice(0, 3).map((tag, idx, arr) => (
+                <span key={idx} className="flex items-center gap-1">
+                  <Badge variant="secondary" className="text-xs">{tag.trim()}</Badge>
+                  {idx < arr.length - 1 && <span>,</span>}
+                </span>
               ))}
             </div>
           )}
+
           <div className="flex space-x-2 pt-2">
             <Button
               variant="outline"
@@ -195,7 +201,6 @@ export function QuestionLibrary({ onBack, onQuestionDetails, onAddToCart, cartQu
     }
   };
 
-  // <<< NEW: fetch all questions on page load
   useEffect(() => {
     fetchQuestions();
   }, []);
