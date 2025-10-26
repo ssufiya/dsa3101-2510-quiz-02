@@ -168,7 +168,7 @@ export function QuestionLibrary({ onBack, onQuestionDetails, onAddToCart, cartQu
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  const difficulties = ["low", "med", "hard"];
+  const difficulties = ["Low", "Med", "High"];
   const types = ["Code", "T/F", "MCQ", "MRQ", "SRQ"];
   const courses = ["DSA1101", "IND5003", "ST1131", "ST2131", "ST2137"];
   const semesters = ["AY23/24 Sem 1", "AY23/24 Sem 2"];
@@ -186,7 +186,7 @@ export function QuestionLibrary({ onBack, onQuestionDetails, onAddToCart, cartQu
           topic: searchTerm || undefined,
           match: filters.matchMode || undefined,
           fuzzy: true,
-          is_latest: true,
+          is_latest: undefined,
           ...overrideFilters,
         },
       });
@@ -200,6 +200,9 @@ export function QuestionLibrary({ onBack, onQuestionDetails, onAddToCart, cartQu
 
   useEffect(() => {
     fetchQuestions();
+    const refreshHandler = () => fetchQuestions();
+    window.addEventListener("refresh-questions", refreshHandler);
+    return () => window.removeEventListener("refresh-questions", refreshHandler);
   }, []);
 
   const isInCart = (id) => cartQuestions.some((q) => q.question_id === id);
@@ -281,15 +284,12 @@ export function QuestionLibrary({ onBack, onQuestionDetails, onAddToCart, cartQu
             selected={filters.semesters}
             setSelected={(vals) => setFilters({ ...filters, semesters: vals })}
           />
-
-          {/* Topic search input placed before Match Mode */}
           <Input
             placeholder="Search for topic..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-64"
           />
-
           <SingleSelectDropdown
             label="Select Match Mode"
             options={matches}
@@ -298,13 +298,11 @@ export function QuestionLibrary({ onBack, onQuestionDetails, onAddToCart, cartQu
           />
         </div>
 
-        {/* Buttons section separated */}
-
+        {/* Buttons */}
         <div className="bg-white border-b border-gray-200 px-6 py-2 flex justify-end gap-2">
           <Button onClick={() => fetchQuestions()}>Filter</Button>
           <Button variant="outline" onClick={clearFilters}>Clear</Button>
         </div>
-
 
         {/* Question List */}
         <div className="p-6">

@@ -4,21 +4,33 @@ import { Button } from "../components/button";
 import { Input } from "../components/input";
 import { Textarea } from "../components/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "../components/dialog";
 
 export default function EditQuestion({ questionId, questionData, onBack, onSave }) {
   const [questionText, setQuestionText] = useState("");
   const [explanation, setExplanation] = useState("");
   const [courseName, setCourseName] = useState("");
   const [courseCode, setCourseCode] = useState("");
-  const [difficulty, setDifficulty] = useState("Medium");
-  const [questionType, setQuestionType] = useState("Multiple Choice");
+  const [difficulty, setDifficulty] = useState("Med");
+  const [questionType, setQuestionType] = useState("MCQ");
   const [assessmentType, setAssessmentType] = useState("");
   const [points, setPoints] = useState(1);
   const [options, setOptions] = useState([]);
   const [tags, setTags] = useState("");
 
-  const difficultyOptions = ["low", "med", "hard"];
-  const questionTypeOptions = ["Code", "T/F", "MCQ", "MRQ","SRQ"];
+  // --- Modal states ---
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalType, setModalType] = useState("success");
+  const [modalMessage, setModalMessage] = useState("");
+
+  const difficultyOptions = ["Low", "Med", "High"];
+  const questionTypeOptions = ["Code", "T/F", "MCQ", "MRQ", "SRQ"];
 
   useEffect(() => {
     if (questionData) {
@@ -26,14 +38,17 @@ export default function EditQuestion({ questionId, questionData, onBack, onSave 
       setExplanation(questionData.explanation || "");
       setCourseName(questionData.course_name || "");
       setCourseCode(questionData.course_code || "");
-      setDifficulty(questionData.difficulty || "Medium");
-      setQuestionType(questionData.question_type || "Multiple Choice");
+      setDifficulty(questionData.difficulty || "Med");
+      setQuestionType(questionData.question_type || "MCQ");
       setAssessmentType(questionData.assessment_type || "");
       setPoints(questionData.points || 1);
 
       if (questionData.options && typeof questionData.options === "object") {
         setOptions(
-          Object.entries(questionData.options).map(([key, value]) => ({ key, value }))
+          Object.entries(questionData.options).map(([key, value]) => ({
+            key,
+            value,
+          }))
         );
       }
 
@@ -52,28 +67,38 @@ export default function EditQuestion({ questionId, questionData, onBack, onSave 
   };
 
   const handleSave = async () => {
-    if (!questionText) return alert("Question text required");
+    if (!questionText || !courseName || !courseCode) {
+      setModalType("error");
+      setModalMessage("⚠️ Please fill in all required fields (Course Name, Course Code, Question Text).");
+      setModalOpen(true);
+      return;
+    }
+
+    const formattedDifficulty =
+      difficulty.charAt(0).toUpperCase() + difficulty.slice(1).toLowerCase();
 
     const csvHeaders = [
       "question_text",
       "explanation",
+      "course_name",
       "course_code",
       "assessment_type",
       "difficulty",
       "points",
       "concepts",
-      ...options.map((opt) => `option_${opt.key.toLowerCase()}`)
+      ...options.map((opt) => `option_${opt.key.toLowerCase()}`),
     ];
 
     const csvRow = [
       `"${questionText.replace(/"/g, '""')}"`,
       `"${explanation.replace(/"/g, '""')}"`,
+      `"${courseName}"`,
       `"${courseCode}"`,
       `"${assessmentType}"`,
-      `"${difficulty}"`,
+      `"${formattedDifficulty}"`,
       points,
       `"${tags}"`,
-      ...options.map((opt) => `"${opt.value.replace(/"/g, '""')}"`)
+      ...options.map((opt) => `"${opt.value.replace(/"/g, '""')}"`),
     ];
 
     const csvContent = csvHeaders.join(",") + "\n" + csvRow.join(",");
@@ -88,89 +113,141 @@ export default function EditQuestion({ questionId, questionData, onBack, onSave 
         { headers: { "Content-Type": "multipart/form-data" } }
       );
 
-      const newId = res.data.new_question_id;
-      const newQuestionRes = await axios.get(
-        `http://localhost:5003/api/questions/${newId}`
-      );
+      console.log("✅ Upload response:", res.data);
 
-      alert(`✅ Question updated! New version: ${res.data.new_version_number}`);
-      onSave(newQuestionRes.data);
-      onBack();
+      const newId = res.data.new_question_id;
+      const newVersion = res.data.new_version_number;
+      const parentId = res.data.previous_version_id || questionId;
+
+      const newQuestionRes = await axios.get(`http://localhost:5003/api/questions/${newId}`);
+
+      // Success modal
+      setModalType("success");
+      setModalMessage(`✅ Successfully uploaded!\nNew version: ${newVersion}`);
+      setModalOpen(true);
+
+      // Auto-close and return
+      setTimeout(() => {
+        setModalOpen(false);
+        onSave(newQuestionRes.data, parentId);
+      }, 2500);
     } catch (err) {
       console.error("❌ Error updating question:", err);
-      alert(err.response?.data?.detail || "Error updating question");
+
+      const data = err.response?.data;
+      let detail = "Error updating question.";
+
+      if (typeof data === "string") detail = data;
+      else if (Array.isArray(data?.errors)) detail = data.errors.join("\n• ");
+      else if (typeof data?.detail === "string") detail = data.detail;
+      else if (Array.isArray(data?.detail)) detail = data.detail.join("\n• ");
+      else if (typeof data?.detail === "object" && data?.detail?.errors)
+        detail = data.detail.errors.join("\n• ");
+
+      setModalType("error");
+      setModalMessage(`❌ Upload failed:\n${detail}`);
+      setModalOpen(true);
     }
   };
 
   return (
-    <Card className="p-4">
-      <CardHeader>
-        <CardTitle>Edit Question</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <label>Course Name</label>
-        <Input value={courseName} onChange={(e) => setCourseName(e.target.value)} />
+    <>
+      <Card className="p-4">
+        <CardHeader>
+          <CardTitle>Edit Question</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <label>Course Name</label>
+          <Input value={courseName} onChange={(e) => setCourseName(e.target.value)} />
 
-        <label>Course Code</label>
-        <Input value={courseCode} onChange={(e) => setCourseCode(e.target.value)} />
+          <label>Course Code</label>
+          <Input value={courseCode} onChange={(e) => setCourseCode(e.target.value)} />
 
-        <label>Difficulty</label>
-        <select
-          value={difficulty}
-          onChange={(e) => setDifficulty(e.target.value)}
-          className="border rounded p-2 w-full"
-        >
-          {difficultyOptions.map((opt) => (
-            <option key={opt} value={opt}>{opt}</option>
+          <label>Difficulty</label>
+          <select
+            value={difficulty}
+            onChange={(e) => setDifficulty(e.target.value)}
+            className="border rounded p-2 w-full"
+          >
+            {difficultyOptions.map((opt) => (
+              <option key={opt} value={opt}>{opt}</option>
+            ))}
+          </select>
+
+          <label>Question Type</label>
+          <select
+            value={questionType}
+            onChange={(e) => setQuestionType(e.target.value)}
+            className="border rounded p-2 w-full"
+          >
+            {questionTypeOptions.map((opt) => (
+              <option key={opt} value={opt}>{opt}</option>
+            ))}
+          </select>
+
+          <label>Assessment Type</label>
+          <Input value={assessmentType} onChange={(e) => setAssessmentType(e.target.value)} />
+
+          <label>Question Text</label>
+          <Textarea value={questionText} onChange={(e) => setQuestionText(e.target.value)} />
+
+          <label>Explanation</label>
+          <Textarea value={explanation} onChange={(e) => setExplanation(e.target.value)} />
+
+          <label>Points</label>
+          <Input
+            type="number"
+            value={points}
+            onChange={(e) => setPoints(Number(e.target.value))}
+          />
+
+          <label>Options</label>
+          {options.map((opt, idx) => (
+            <div key={idx} className="flex space-x-2 items-center">
+              <span>{opt.key}.</span>
+              <Input
+                value={opt.value}
+                onChange={(e) => handleOptionChange(idx, e.target.value)}
+              />
+            </div>
           ))}
-        </select>
 
-        <label>Question Type</label>
-        <select
-          value={questionType}
-          onChange={(e) => setQuestionType(e.target.value)}
-          className="border rounded p-2 w-full"
-        >
-          {questionTypeOptions.map((opt) => (
-            <option key={opt} value={opt}>{opt}</option>
-          ))}
-        </select>
+          <label>Tags (comma separated)</label>
+          <Input value={tags} onChange={(e) => setTags(e.target.value)} />
 
-        <label>Assessment Type</label>
-        <Input value={assessmentType} onChange={(e) => setAssessmentType(e.target.value)} />
-
-        <label>Question Text</label>
-        <Textarea value={questionText} onChange={(e) => setQuestionText(e.target.value)} />
-
-        <label>Explanation</label>
-        <Textarea value={explanation} onChange={(e) => setExplanation(e.target.value)} />
-
-        <label>Points</label>
-        <Input
-          type="number"
-          value={points}
-          onChange={(e) => setPoints(Number(e.target.value))}
-        />
-
-        <label>Options</label>
-        {options.map((opt, idx) => (
-          <div key={idx} className="flex space-x-2 items-center">
-            <span>{opt.key}.</span>
-            <Input
-              value={opt.value}
-              onChange={(e) => handleOptionChange(idx, e.target.value)}
-            />
+          <div className="flex space-x-2 mt-4">
+            <Button onClick={handleSave}>Save / Upload New Version</Button>
+            <Button variant="secondary" onClick={onBack}>Cancel</Button>
           </div>
-        ))}
+        </CardContent>
+      </Card>
 
-        <label>Tags (comma separated)</label>
-        <Input value={tags} onChange={(e) => setTags(e.target.value)} />
-
-        <div className="flex space-x-2 mt-4">
-          <Button onClick={handleSave}>Save / Upload New Version</Button>
-          <Button variant="secondary" onClick={onBack}>Cancel</Button>
-        </div>
-      </CardContent>
-    </Card>
+      {/* --- Popup modal --- */}
+      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+        <DialogContent
+          className={`sm:max-w-md animate-fadeScale !text-white !border-none shadow-lg rounded-xl p-6 ${
+            modalType === "success" ? "!bg-green-600" : "!bg-red-600"
+          }`}
+        >
+          <DialogHeader>
+            <DialogTitle className="text-white font-semibold">
+              {modalType === "success" ? "Upload Successful" : "Upload Failed"}
+            </DialogTitle>
+            <DialogDescription className="text-white whitespace-pre-line">
+              {modalMessage}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end pt-4">
+            <Button
+              variant="secondary"
+              className="bg-white text-gray-800 hover:bg-gray-100"
+              onClick={() => setModalOpen(false)}
+            >
+              Close
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
