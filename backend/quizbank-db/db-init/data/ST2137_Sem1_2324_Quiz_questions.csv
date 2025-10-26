@@ -27,10 +27,10 @@ Guessed Milk   	3 | 1
 Guessed Tea  	1 | 3
 Suppose that Fisher’s Exact Test was applied to assess if there was any association between her guesses and the truth. Under the null hypothesis of Fisher’s Exact Test, what is the probability of observing the table above?",MCQ,0.5,0.25,0.5625,0.228,,D,,1,High,"Conditional Probability, Hypothesis Testing, Exact Test",
 ,3,,"Consider the following two histograms (created with Python) from the liverpool dataset used in Tutorial 2:
-!(ST2137_Questions_Figure1.png)
+!(ST2137_Sem1_2324_Quiz_Figure1.png)
 
 What is the argument needed to convert the Histogram A into Histogram B?
-liverpool.GF.hist(    1    )",MCQ,freq=False,density=True,"type=""percent""","type=""density"" ",,A,,1,Low,"Data Manipulation, EDA, Model Validation",ST2137_Questions_Figure1.png
+liverpool.GF.hist(    1    )",MCQ,freq=False,density=True,"type=""percent""","type=""density"" ",,A,,1,Low,"Data Manipulation, EDA, Model Validation",ST2137_Sem1_2324_Quiz_Figure1.png
 ,4,,"The data in phones.csv contains information on phone calls made in Belgium from 1950 until 1973. Let Y be the number of calls, and X be the year variable. Read the data into Python as a pandas dataframe and answer the following questions:
 
 1. Write a function that takes in three arguments: beta0, beta1, and the phones dataframe. It should compute the following L1-norm and return it: ∑i=1n|Yi−β0−β1Xi|
@@ -45,9 +45,9 @@ goal_counts =pd.DataFrame(np.zeros((10, 2), dtype='int'), columns=['GF', 'GA'])
 tmp2 =liverpool.GF.value_counts() 
 goal_counts.loc[tmp2.index, 'GF'] =tmp2
 Continue the code to fill up the second column, which tabulates the goal counts against into the second column of goal_counts. Then create the following bar chart, which compares the GF and GA:
-!(ST2137_Questions_Figure2.png)",,,,,,,,,4,Med,"Data Manipulation, EDA, Model Validation",ST2137_Questions_Figure2.png
+!(ST2137_Sem1_2324_Quiz_Figure2.png)",,,,,,,,,4,Med,"Data Manipulation, EDA, Model Validation",ST2137_Sem1_2324_Quiz_Figure2.png
 ,6,,"What is the most likely solution to the error below?
-!(ST2137_Questions_Figure3.png)",MCQ,"The function to read the file is read.csv, not read_csv.",The pandas package has to be imported.,The pandas package has to be installed.,The separator has to be specified as sep=';'.,,B,,1,Low,"Data Manipulation, Debugging",ST2137_Questions_Figure3.png
+!(ST2137_Sem1_2324_Quiz_Figure3.png)",MCQ,"The function to read the file is read.csv, not read_csv.",The pandas package has to be imported.,The pandas package has to be installed.,The separator has to be specified as sep=';'.,,B,,1,Low,"Data Manipulation, Debugging",ST2137_Sem1_2324_Quiz_Figure3.png
 ,7,,"The heifers dataset was introduced on in the topic on ANOVA. An analyst used SAS to run the ANOVA procedure and estimate the contrast comparing the Control group to the rest of the five groups. This is the code that the analyst used:
 proc glm data=ST2137.HEIFERS; 
 class type; 
@@ -58,11 +58,11 @@ estimate 'control vs. rest' type -1 5 -1 -1 -1 -1 / divisor=5;
 run; 
 The essential output for this particular contrast can be seen in the following figures:
 
-!(ST2137_Questions_Figure4.png)
+!(ST2137_Sem1_2324_Quiz_Figure4.png)
 
 Use Python to recreate
 1.	the point estimate of the contrast, and
-2.	the confidence interval for the contrast.",Code,,,,,,,,6,High,"Inferential Statistics, ANOVA, Data Manipulation, Linear Modeling",ST2137_Questions_Figure4.png
+2.	the confidence interval for the contrast.",Code,,,,,,,,6,High,"Inferential Statistics, ANOVA, Data Manipulation, Linear Modeling",ST2137_Sem1_2324_Quiz_Figure4.png
 ,9,,"What is the length of the resulting output in this Python code?
 my_list =['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'] 
 result =my_list[2:8:2] 

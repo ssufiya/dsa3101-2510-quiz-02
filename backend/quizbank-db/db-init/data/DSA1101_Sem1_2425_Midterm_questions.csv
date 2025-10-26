@@ -52,7 +52,7 @@ predict(M, newdata = new)
 # A: 82.19378 
 # B: 58.83136",,4,Med,"Linear Modeling, Data Manipulation",
 1,1,9,"Write R code to create a new column in data, names as S where S has two categories: Good and Not Good. 
-S is Good if the satisfaction score in Satisfaction is larger than 70; and S is Not Good if the satisfaction score in Satisfaction is ≤ 70.",Code,,,,,,"data$S = ifelse(data$Satisfaction >70, ""Good"", ""Not Good"")
+S is Good if the satisfaction score in Satisfaction is larger than 70; and S is Not Good if the satisfaction score in Satisfaction is ‚â§ 70.",Code,,,,,,"data$S = ifelse(data$Satisfaction >70, ""Good"", ""Not Good"")
 
 head(data) # 6 columns",,2,Low,Data Manipulation,
 1,1,10,"Write code to create a new data frame, called data.X which has the three columns Age, Severity and Anxiety after standardization for all patients.",Code,,,,,,"data.X = scale(data[, c(2,3,5)]) # scale Age, Severity and Anxiety",,2,Low,"Data Manipulation, Unsupervised Learning",

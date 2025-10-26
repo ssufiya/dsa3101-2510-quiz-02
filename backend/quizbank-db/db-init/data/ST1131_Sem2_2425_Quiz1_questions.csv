@@ -8,7 +8,7 @@ Context ID,Question Number,Sub-Question Number,Question Text,Question Type,Optio
 ,7,,"Consider the following dataset of observations:
 0.54, 0.42, 0.85, 1.57, 1.09, 0.75, 1.28, 1.86, 2.51, 1.94
 Which of the following is the correct histogram for this data?
-!(ST1131_Quiz1_Figure1.png)",MCQ,a,b,c,d,,B,,1,Low,"EDA, Data Manipulation",ST1131_Quiz1_Figure1.png
+!(ST1131_Sem2_2425_Quiz1_Figure1.png)",MCQ,a,b,c,d,,B,,1,Low,"EDA, Data Manipulation",ST1131_Sem2_2425_Quiz1_Figure1.png
 ,8,,"Variable \""smoking level\"" has 3 levels that has values recorded in numbers (0, 1 and 3), where 0 = “no smoking”, 1 = “<= 5 cigarettes a day” and 3 = “more than 5 cigarettes a day”. It is a categorical variable.",T/F,True,False,,,,A,,1,Low,Basic Concepts in Statistics,
 ,9,,"Which of the following variables are continuous, when the measurement is as precise as possible?",MRQ,Age of mother,Number of children in a family,Cooking time for preparing dinner,Latitude of a city,Longtitude of a city,"A, C, D, E",,1,Low,Basic Concepts in Statistics,
 ,10,,"Scores on a difficult exam have a mean of 57 and a standard deviation of 20. The instructor boosts all the scores by 20 points before awarding grades. What is the standard deviation of the new boosted scores?"",",SRQ,,,,,,20,,1,Low,"Basic Concepts in Statistics, Data Manipulation",
