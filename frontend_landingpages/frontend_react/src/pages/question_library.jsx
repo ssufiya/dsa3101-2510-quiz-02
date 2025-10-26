@@ -187,7 +187,7 @@ export function QuestionLibrary({ onBack, onQuestionDetails, onAddToCart, cartQu
           match: filters.matchMode || undefined,
           fuzzy: true,
           is_latest: true,
-          ...overrideFilters, // override any filters if needed
+          ...overrideFilters,
         },
       });
       setQuestions(response.data.data || []);
@@ -257,12 +257,6 @@ export function QuestionLibrary({ onBack, onQuestionDetails, onAddToCart, cartQu
 
         {/* Filters */}
         <div className="bg-white border-b border-gray-200 px-6 py-4 flex flex-wrap gap-4 items-end">
-          <Input
-            placeholder="Search by keyword..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-64"
-          />
           <MultiSelectDropdown
             label="Select Difficulty"
             options={difficulties}
@@ -287,16 +281,30 @@ export function QuestionLibrary({ onBack, onQuestionDetails, onAddToCart, cartQu
             selected={filters.semesters}
             setSelected={(vals) => setFilters({ ...filters, semesters: vals })}
           />
+
+          {/* Topic search input placed before Match Mode */}
+          <Input
+            placeholder="Search for topic..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-64"
+          />
+
           <SingleSelectDropdown
             label="Select Match Mode"
             options={matches}
             selected={filters.matchMode}
             setSelected={(val) => setFilters({ ...filters, matchMode: val })}
           />
-
-          <Button onClick={() => fetchQuestions()} className="ml-2">Filter</Button>
-          <Button variant="outline" onClick={clearFilters} className="ml-2">Clear</Button>
         </div>
+
+        {/* Buttons section separated */}
+
+        <div className="bg-white border-b border-gray-200 px-6 py-2 flex justify-end gap-2">
+          <Button onClick={() => fetchQuestions()}>Filter</Button>
+          <Button variant="outline" onClick={clearFilters}>Clear</Button>
+        </div>
+
 
         {/* Question List */}
         <div className="p-6">
