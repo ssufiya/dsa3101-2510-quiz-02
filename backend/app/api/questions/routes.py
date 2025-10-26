@@ -1,5 +1,5 @@
 """
-API routes for Questions
+API routes for Questions - Updated for New DB Schema
 """
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Body
 from sqlalchemy.orm import Session
@@ -11,15 +11,10 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 from app.db import get_db
-from app.utils.file_parser import parse_csv, parse_csv_for_version
-from app.utils.validation import validate_question_data
 from pathlib import Path
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from psycopg2.extras import RealDictCursor
-import psycopg2
 import shutil
-import subprocess
 import pandas as pd 
 import io
 import os
@@ -27,556 +22,115 @@ import zipfile
 import csv
 import tempfile
 from datetime import datetime
-
-
-router = APIRouter()
-
-# API #1: Filtered Questions Retrieval
-@router.get("/")
-async def get_questions(
-    id: Optional[int] = Query(None, description="Filter by question ID"),
-    subject: Optional[str] = Query(None, description="Filter by subject/course"),
-    difficulty: Optional[str] = Query(None, description="Filter by difficulty"),
-    type: Optional[str] = Query(None, description="Filter by question type"),
-    semester: Optional[str] = Query(None, description="Filter by semester"),
-    topic: Optional[str] = Query(None, description="Filter by one or more topics"),
-    match: Optional[str] = Query("all", description="Match mode: 'any' (OR) or 'all' (AND) across all filters"),
-    fuzzy: Optional[bool] = Query(True, description="Enable fuzzy matching for topic keywords"),
-    is_latest: Optional[bool] = Query(True, description="Only return latest versions"),
-    db: Session = Depends(get_db)
-):
-    """
-    GET /api/questions
-    Returns all questions with flexible filtering.
-
-    Example:
-    - ?difficulty=low&subject=dsa1101&match=all → Intersection (AND)
-    - ?difficulty=low&subject=dsa1101&match=any → Union (OR)
-    - ?topic=regression,data manipulation&match=any → Any topic (OR fuzzy match)
-    """
-
-    try:
-        # Base query and parameter dict
-        query_str = """
-            SELECT 
-                q.question_id, 
-                q.question_text, 
-                q.question_type,
-                c.course_code, 
-                c.course_name, 
-                a.assessment_type, 
-                q.difficulty, 
-                q.concepts, 
-                q.created_at, 
-                q.version_number,
-                q.original_id,
-                q.is_latest
-            FROM questions q
-            LEFT JOIN courses c ON q.course_id = c.course_id
-            LEFT JOIN assessments a ON q.assessment_id = a.assessment_id
-            WHERE 1=1
-        """
-        params = {}
-        conditions = []
-
-        # --- ID Filter ---
-        if id is not None:
-            conditions.append("q.question_id = :id")
-            params["id"] = id
-
-        # --- Subject / Course Filter ---
-        if subject is not None:
-            conditions.append("(c.course_code ILIKE :subject OR c.course_name ILIKE :subject)")
-            params["subject"] = f"%{subject}%"
-
-        # --- Difficulty Filter ---
-        if difficulty is not None:
-            conditions.append("q.difficulty = :difficulty")
-            params["difficulty"] = difficulty
-
-        # --- Question Type Filter ---
-        if type is not None:
-            conditions.append("q.question_type =:question_type")
-            params["question_type"] = type
-
-        # --- Semester Filter ---
-        if semester is not None:
-            conditions.append("a.assessment_type ILIKE :semester")
-            params["semester"] = f"%{semester}%"
-
-        # --- Latest Version Filter ---
-        if is_latest:
-            conditions.append("q.is_latest = TRUE")
-
-        # --- Combine Conditions: AND vs OR ---
-        if conditions:
-            if match == "any":
-                query_str += " AND (" + " OR ".join(conditions) + ")"
-            else:
-                query_str += " AND " + " AND ".join(conditions)
-
-        # --- Execute base query first ---
-        base_results = db.execute(text(query_str), params).fetchall()
-
-        # --- Handle Topics (with optional fuzzy match) ---
-        if topic:
-            topics = [t.strip().lower() for t in topic.split(",") if t.strip()]
-            filtered_rows = []
-
-            for row in base_results:
-                question_topics = [t.strip().lower() for t in (row.concepts.split(",") if row.concepts else [])]
-
-                topic_matches = []
-                for user_topic in topics:
-                    if fuzzy:
-                        # Fuzzy partial ratio threshold = 70
-                        match_found = any(fuzz.partial_ratio(user_topic, qt) > 70 for qt in question_topics)
-                    else:
-                        match_found = any(user_topic in qt for qt in question_topics)
-                    topic_matches.append(match_found)
-
-                # Apply topic match logic
-                if (match == "all" and all(topic_matches)) or (match != "all" and any(topic_matches)):
-                    filtered_rows.append(row)
-        else:
-            filtered_rows = base_results
-
-        # --- Format output ---
-        questions = []
-        for row in filtered_rows:
-            questions.append({
-                "question_id": row.question_id,
-                "question_text": row.question_text,
-                "question_type": row.question_type,
-                "course_code": row.course_code,
-                "course_name": row.course_name,
-                "assessment_type": row.assessment_type,
-                "difficulty": row.difficulty,
-                "concepts": row.concepts.split(',') if row.concepts else [],
-                "created_at": row.created_at.isoformat() if row.created_at else None,
-                "version_number": row.version_number,
-                "original_id": row.original_id,
-                "is_latest": row.is_latest
-            })
-
-        return {
-            "success": True,
-            "count": len(questions),
-            "data": questions
-        }
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
-
-# API #2: More Question Details
-@router.get("/{id}")
-async def get_question_by_id(id: int, db: Session = Depends(get_db)):
-    """
-    GET /api/questions/:id
-    Returns full question content with context and attachments
-    """
-    try: 
-        query = text("""
-            SELECT 
-                q.*,
-                c.course_code,
-                c.course_name,
-                a.assessment_type,
-                ctx.context_text,
-                ctx.context_attachment,
-                STRING_AGG(DISTINCT att_q.attachment_name, ', ') as question_attachments,
-                STRING_AGG(DISTINCT att_ctx.attachment_name, ', ') as context_attachments
-            FROM questions q
-            LEFT JOIN courses c ON q.course_id = c.course_id
-            LEFT JOIN assessments a ON q.assessment_id = a.assessment_id
-            LEFT JOIN contexts ctx ON q.context_id = ctx.context_id
-            LEFT JOIN attachments att_q ON q.question_id = att_q.question_id
-            LEFT JOIN attachments att_ctx ON ctx.context_id = att_ctx.context_id
-            WHERE q.question_id = :id
-            GROUP BY q.question_id, c.course_code, c.course_name, a.assessment_type, 
-                     ctx.context_text, ctx.context_attachment
-        """)
-    
-        result = db.execute(query, {"id": id})
-        row = result.fetchone()
-        
-        if not row:
-            raise HTTPException(status_code=404, detail="Question not found")
-        
-        # Build clean response
-        response_data = {
-            "question_id": row.question_id,
-            "question_number": row.question_number,
-            "sub_question_number": row.sub_question_number,
-            "question_text": row.question_text,
-            "question_type": row.question_type,
-            "difficulty": row.difficulty,
-            "correct_answer": row.correct_answer,
-            "explanation": row.explanation,
-            "points": float(row.points) if row.points else 1.0,
-            "concepts": row.concepts.split(',') if row.concepts else [],
-            "course_code": row.course_code,
-            "course_name": row.course_name,
-            "assessment_type": row.assessment_type,
-            "created_at": row.created_at.isoformat() if row.created_at else None,
-            "version_number": row.version_number,
-            "previous_version_id": row.previous_version_id
-        }
-        
-        # Add options based on question type
-        if row.question_type in ["MCQ", "MRQ"]:
-            options = {}
-            if row.option_a:
-                options["A"] = row.option_a
-            if row.option_b:
-                options["B"] = row.option_b
-            if row.option_c:
-                options["C"] = row.option_c
-            if row.option_d:
-                options["D"] = row.option_d
-            if row.option_e:
-                options["E"] = row.option_e
-            if options:
-                response_data["options"] = options
-        
-        elif row.question_type == "T/F":
-            response_data["options"] = {
-                "A": row.option_a if row.option_a else "True",
-                "B": row.option_b if row.option_b else "False"
-            }
-        
-        # Add context (shared across multiple questions)
-        if row.context_text or row.context_attachment or row.context_attachments:
-            context = {}
-            
-            if row.context_text:
-                context["text"] = row.context_text
-            
-            # Context attachments (images/files for the context)
-            context_files = []
-            
-            # From context_attachment column
-            if row.context_attachment:
-                context_files.append({
-                    "name": row.context_attachment,
-                    "url": f"/api/attachments/{row.context_attachment}"
-                })
-            
-            if context_files:
-                context["attachments"] = context_files
-            
-            if context:
-                response_data["context"] = context
-        
-        # Add question-specific attachments
-
-        if row.question_attachments:
-            question_files = []
-            for name in row.question_attachments.split(', '):
-                if name.strip():
-                    question_files.append({
-                        "name": name.strip(),
-                        "url": f"/api/attachments/{name.strip()}"
-                    })
-            if question_files:
-                response_data["attachments"] = question_files
-        
-        return {
-            "success": True,
-            "data": response_data
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
-
-
-# API #3: Fetching ALL Versions
-@router.get("/{id}/versions")
-async def get_question_versions(id: int, db: Session = Depends(get_db)):
-    """
-    GET /api/questions/{id}/versions
-
-    Retrieve all related versions of the selected question — including:
-    - The original (root) question
-    - All descendant versions (direct + indirect)
-    - Any sibling/branched versions derived from the same parent
-
-    Returns:
-    - question_id, question_text, version_number, previous_version_id, is_latest
-    - course_code, course_name, assessment_type, difficulty, concepts
-    - created_at (ISO format)
-    
-    Used in: QuestionDetails
-    """
-
-    try:
-        # Find the "root" question (the start of the version chain)
-        root_query = text("""
-            SELECT question_id, previous_version_id
-            FROM questions
-            WHERE question_id = :id
-        """)
-        result = db.execute(root_query, {"id": id})
-        row = result.fetchone()
-
-        if not row:
-            raise HTTPException(status_code=404, detail="Question not found")
-
-        root_id = row.previous_version_id if row.previous_version_id else row.question_id
-
-        # Recursive CTE to fetch *all versions* in the lineage
-        versions_query = text("""
-            WITH RECURSIVE version_tree AS (
-                SELECT * FROM questions WHERE question_id = :root_id
-                UNION ALL
-                SELECT q.*
-                FROM questions q
-                INNER JOIN version_tree vt ON q.previous_version_id = vt.question_id
-            )
-            SELECT
-                vt.question_id,
-                vt.question_text,
-                vt.question_type,
-                vt.version_number,
-                vt.previous_version_id,
-                vt.is_latest,
-                vt.difficulty,
-                vt.concepts,
-                vt.created_at,
-                c.course_code,
-                c.course_name,
-                a.assessment_type
-            FROM version_tree vt
-            LEFT JOIN courses c ON vt.course_id = c.course_id
-            LEFT JOIN assessments a ON vt.assessment_id = a.assessment_id
-            ORDER BY vt.version_number ASC, vt.created_at ASC
-        """)
-
-        result = db.execute(versions_query, {"root_id": root_id})
-        rows = result.fetchall()
-
-        if not rows:
-            raise HTTPException(status_code=404, detail="No versions found")
-
-        # Format the response
-        versions = []
-        for row in rows:
-            versions.append({
-                "question_id": row.question_id,
-                "question_text": row.question_text or "",
-                "question_type": row.question_type or "",
-                "course_code": row.course_code or "",
-                "course_name": row.course_name or "",
-                "assessment_type": row.assessment_type or "",
-                "difficulty": row.difficulty or "",
-                "concepts": row.concepts.split(',') if row.concepts else [],
-                "created_at": row.created_at.isoformat() if row.created_at else None,
-                "version_number": row.version_number,
-                "previous_version_id": row.previous_version_id,
-                "is_latest": row.is_latest
-            })
-
-        return {
-            "success": True,
-            "root_id": root_id,
-            "version_count": len(versions),
-            "data": versions
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
-
-
-# API #4: Uploading new question version
-@router.post("/{id}/editversion")
-async def upload_new_version(
-    id: int,
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db)
-):
-    """
-    POST /api/questions/{id}/editversion
-
-    Upload a new CSV file containing edited question data to create a new version.
-    - Increments version_number
-    - Links to previous version via previous_version_id
-    - Marks old version's is_latest = FALSE
-    - Creates a new row for each question (preserving history)
-    """
-    try:
-        # ===== STEP 0: Validate file =====
-        if not file.filename.endswith(".csv"):
-            raise HTTPException(status_code=400, detail="Only CSV files are allowed")
-
-        contents = await file.read()
-
-        # ===== STEP 1: Find the parent question =====
-        current_query = text("""
-            SELECT question_id, course_id, assessment_id, version_number, is_latest
-            FROM questions
-            WHERE question_id = :id
-        """)
-        result = db.execute(current_query, {"id": id})
-        current = result.fetchone()
-        if not current:
-            raise HTTPException(status_code=404, detail=f"Parent question (ID={id}) not found")
-
-        # ===== STEP 2: Parse CSV =====
-        df = None
-        for enc in ['utf-8', 'latin1', 'iso-8859-1', 'windows-1252', 'cp1252']:
-            try:
-                df = pd.read_csv(io.BytesIO(contents), encoding=enc)
-                break
-            except UnicodeDecodeError:
-                continue
-        if df is None:
-            raise HTTPException(status_code=400, detail="Unable to decode CSV file")
-
-        df.columns = [col.strip().lower().replace(" ", "_") for col in df.columns]
-        questions_data = df.to_dict(orient="records")
-
-        if len(questions_data) != 1:
-            raise HTTPException(status_code=400, detail="Edit version file must contain exactly ONE question")
-
-        question_data = questions_data[0]
-
-        # ===== STEP 3: Validate data =====
-        validation_errors = validate_question_data(question_data)
-        if validation_errors:
-            raise HTTPException(status_code=400, detail={"errors": validation_errors})
-
-        # ===== STEP 4: Lookup course and assessment =====
-        # (Reuse parent if not provided)
-        course_id = current.course_id
-        assessment_id = current.assessment_id
-
-        if question_data.get("course_code"):
-            course_result = db.execute(
-                text("SELECT course_id FROM courses WHERE course_code = :code"),
-                {"code": question_data.get("course_code")}
-            ).fetchone()
-            if course_result:
-                course_id = course_result.course_id
-
-        if question_data.get("assessment_type"):
-            assess_result = db.execute(
-                text("SELECT assessment_id FROM assessments WHERE assessment_type = :atype"),
-                {"atype": question_data.get("assessment_type")}
-            ).fetchone()
-            if assess_result:
-                assessment_id = assess_result.assessment_id
-
-        # ===== STEP 5: Save CSV file to /quizbank-db/db-init/data =====
-        data_dir = Path(__file__).parent.parent.parent.parent / "quizbank-db" / "db-init" / "data"
-        data_dir.mkdir(parents=True, exist_ok=True)
-
-        # Rename file to include version info for traceability
-        versioned_filename = f"question_{id}_v{current.version_number + 1}_{file.filename}"
-        dest_file_path = data_dir / versioned_filename
-
-        if dest_file_path.exists():
-            raise HTTPException(status_code=400, detail=f"File {versioned_filename} already exists")
-
-        with open(dest_file_path, "wb") as f:
-            f.write(contents)
-
-        # ===== STEP 6: Update parent is_latest to FALSE =====
-        db.execute(
-            text("UPDATE questions SET is_latest = FALSE WHERE question_id = :id"),
-            {"id": id}
-        )
-
-        # ===== STEP 7: Prepare insert query for new version =====
-        insert_fields = [
-            "question_text", "difficulty", "concepts",
-            "course_id", "assessment_id",
-            "version_number", "previous_version_id", "is_latest"
-        ]
-        insert_values = [
-            ":question_text", ":difficulty", ":concepts",
-            ":course_id", ":assessment_id",
-            ":version_number", ":previous_version_id", "TRUE"
-        ]
-        params = {
-            "question_text": question_data.get("question_text"),
-            "difficulty": question_data.get("difficulty"),
-            "concepts": question_data.get("concepts"),
-            "course_id": course_id,
-            "assessment_id": assessment_id,
-            "version_number": current.version_number + 1,
-            "previous_version_id": id
-        }
-
-        # Optional fields (same pattern as API #5)
-        for field in [
-            "correct_answer", "option_a", "option_b", "option_c", "option_d", "option_e",
-            "explanation", "points", "question_number", "sub_question_number", "question_type", "context"
-        ]:
-            if question_data.get(field) is not None:
-                insert_fields.append(field)
-                insert_values.append(f":{field}")
-                params[field] = question_data.get(field)
-
-        insert_query = text(f"""
-            INSERT INTO questions ({', '.join(insert_fields)})
-            VALUES ({', '.join(insert_values)})
-            RETURNING question_id
-        """)
-
-        result = db.execute(insert_query, params)
-        new_id = result.fetchone()[0]
-
-        db.commit()
-
-        return {
-            "success": True,
-            "message": "New version created successfully",
-            "previous_question_id": id,
-            "new_question_id": new_id,
-            "new_version_number": current.version_number + 1
-        }
-
-    except HTTPException:
-        db.rollback()
-        raise
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
-
-
-
-# API #5: Uploading a NEW Quiz/Question
-# Configuration
+import logging
+import re
+import unicodedata
+
+# Setup logging once
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Configuration (declared once)
 BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 STORAGE_PNG_PATH = BACKEND_ROOT / "quizbank-db" / "storage" / "png"
 UPLOADS_BASE_PATH = BACKEND_ROOT / "quizbank-db" / "uploads"
-INGEST_SCRIPT = BACKEND_ROOT / "quizbank-db" / "scripts" / "ingest_uploads.sh"
 
 # Ensure directories exist
 STORAGE_PNG_PATH.mkdir(parents=True, exist_ok=True)
 UPLOADS_BASE_PATH.mkdir(parents=True, exist_ok=True)
 
-# Database connection helper
-def get_db_connection():
-    """Get database connection - adjust credentials as needed"""
-    return psycopg2.connect(
-        dbname=os.getenv("DB_NAME", "quizbank"),
-        user=os.getenv("DB_USER", "postgres"),
-        password=os.getenv("DB_PASSWORD", ""),
-        host=os.getenv("DB_HOST", "localhost"),
-        port=os.getenv("DB_PORT", "5432")
-    )
+# Create router once
+router = APIRouter()
 
-# Pydantic models
+# Import DB connection
+try:
+    from app.db.connection import SessionLocal
+except ImportError:
+    logger.warning("Could not import SessionLocal - DB operations will fail")
+    SessionLocal = None
+
+# Filename parsing regex
+FNAME_RE = re.compile(
+    r"""
+    ^
+    (?P<course>[A-Za-z]{2,}\d{4})         # DSA1101 / ST2131 / IND5003
+    (?:_Sem(?P<sem>\d))?                  # optional _Sem1
+    (?:_(?P<acad>\d{4}))?                 # optional _2425
+    _(?P<title>.+)                        # title can contain underscores
+    _(?P<kind>context|contexts|questions) # file kind
+    $
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+_WS = re.compile(r"\s+", flags=re.UNICODE)
+
+# Helper functions
+def _clean_header(s: str) -> str:
+    """Unicode normalize, lowercase, replace whitespace/dashes with underscores"""
+    s = unicodedata.normalize("NFKC", s)
+    s = s.replace("\ufeff", "").replace("\u200b", "")
+    s = s.lower()
+    s = _WS.sub("_", s.strip())
+    s = s.replace("-", "_")
+    s = re.sub(r"_+", "_", s)
+    return s
+
+def normalise_keys(row: dict) -> dict:
+    """Lower/underscore keys using unicode-aware normalization"""
+    out = {}
+    for k, v in row.items():
+        if k is None:
+            continue
+        nk = _clean_header(str(k))
+        out[nk] = v
+        out[k] = v
+    return out
+
+def G(row: dict, *candidates, default: str = "") -> str:
+    """Get value from row using multiple candidate keys"""
+    n = normalise_keys(row)
+    for key in candidates:
+        if key in n and n[key] not in (None, ""):
+            return str(n[key])
+        ck = _clean_header(str(key))
+        if ck in n and n[ck] not in (None, ""):
+            return str(n[ck])
+    return default
+
+def read_csv_rows(path: Path) -> list[dict]:
+    """Robust CSV reader"""
+    b = path.read_bytes()
+    try:
+        s = b.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        s = b.decode("utf-8", errors="replace")
+    return list(csv.DictReader(io.StringIO(s)))
+
+def parse_meta_from_filename(pathlike) -> Optional[Tuple[str, str, str, Optional[str], Optional[str]]]:
+    """Return (course_code, assessment_type, kind, acadyear, semester)."""
+    name = pathlike.name if hasattr(pathlike, "name") else str(pathlike)
+    stem = name[:-4] if name.lower().endswith(".csv") else name
+
+    m = FNAME_RE.match(stem)
+    if not m:
+        return None
+
+    course = m.group("course").upper().strip()
+    title = m.group("title").strip()
+    kind = m.group("kind").lower()
+    ay = m.group("acad") or None
+    sem = m.group("sem") or None
+
+    norm_kind = "contexts" if "context" in kind else "questions"
+    return (course, title, norm_kind, ay, sem)
+
+# Pydantic models for API #5
 class QuestionPreview(BaseModel):
-    question_number: Optional[int]
-    sub_question_number: Optional[int]
+    question_number: Optional[int] = None
+    sub_question_number: Optional[int] = None
     question_text: str
-    question_type: str
+    question_type: Optional[str] = None
     option_a: Optional[str] = None
     option_b: Optional[str] = None
     option_c: Optional[str] = None
@@ -585,8 +139,8 @@ class QuestionPreview(BaseModel):
     correct_answer: Optional[str] = None
     explanation: Optional[str] = None
     points: Optional[float] = None
-    difficulty: str
-    concepts: str
+    difficulty: Optional[str] = None
+    concepts: Optional[str] = None
     attachment: Optional[str] = None
     context_id: Optional[str] = None
 
@@ -604,103 +158,636 @@ class UploadPreviewResponse(BaseModel):
     assessment_type: Optional[str] = None
     academic_year: Optional[str] = None
     semester: Optional[str] = None
+    debug_info: Optional[Dict] = None
 
 class ConfirmUploadRequest(BaseModel):
     upload_id: str
-    course_code: str
-    assessment_type: str
-    academic_year: Optional[str] = None
-    semester: Optional[str] = None
+
+class ConfirmUploadResponse(BaseModel):
+    success: bool
+    message: str
+    upload_id: str
+    questions_inserted: int
+    contexts_inserted: int
+    attachments_copied: int
+
+class CancelUploadRequest(BaseModel):
+    upload_id: str
+
+class CancelUploadResponse(BaseModel):
+    success: bool
+    message: str
+    upload_id: str
 
 # Temporary storage for pending uploads
 pending_uploads: Dict[str, Dict] = {}
 
-def parse_csv_to_dict(csv_path: Path) -> List[Dict]:
-    """Parse CSV file and return list of dictionaries"""
-    with open(csv_path, 'r', encoding='utf-8') as f:
-        reader = csv.DictReader(f)
-        return [row for row in reader]
-
-def validate_questions_csv(questions: List[Dict]) -> Tuple[bool, Optional[str]]:
-    """Validate questions CSV data"""
-    required_fields = ['Question Text', 'Question Type', 'Difficulty', 'Concepts']
+# Validation helpers
+def validate_questions_data(rows: List[dict]) -> Tuple[bool, Optional[str]]:
+    """Validate questions"""
+    if not rows:
+        return False, "No question rows found"
     
-    for idx, q in enumerate(questions, 1):
-        for field in required_fields:
-            if field not in q or not q[field].strip():
-                return False, f"Row {idx}: Missing required field '{field}'"
+    for idx, r in enumerate(rows, 1):
+        qtext = (G(r, "Question Text", "question_text") or "").strip()
+        if not qtext:
+            return False, f"Row {idx}: Missing Question Text"
         
-        # If Question Number is present, it must be valid
-        if 'Question Number' in q and q['Question Number'].strip():
+        qnum = (G(r, "Question Number", "question_number") or "").strip()
+        if qnum:
             try:
-                int(q['Question Number'])
+                int(qnum)
             except ValueError:
-                return False, f"Row {idx}: Invalid Question Number"
+                return False, f"Row {idx}: Invalid Question Number '{qnum}'"
+        
+        sqnum = (G(r, "Sub-Question Number", "sub_question_number") or "").strip()
+        if sqnum:
+            try:
+                int(sqnum)
+            except ValueError:
+                return False, f"Row {idx}: Invalid Sub-Question Number '{sqnum}'"
+        
+        pts_txt = (G(r, "Points", "points") or "").strip()
+        if pts_txt:
+            try:
+                float(pts_txt)
+            except ValueError:
+                return False, f"Row {idx}: Invalid Points value '{pts_txt}'"
     
     return True, None
 
-def validate_context_csv(contexts: List[Dict]) -> Tuple[bool, Optional[str]]:
-    """Validate context CSV data"""
-    for idx, ctx in enumerate(contexts, 1):
-        context_id = ctx.get('Context ID', '').strip()
-        context_text = ctx.get('Context Text', '').strip()
+def validate_context_data(rows: List[dict]) -> Tuple[bool, Optional[str]]:
+    """Validate contexts"""
+    if not rows:
+        return True, None
+    
+    for idx, r in enumerate(rows, 1):
+        context_local_id = (G(r, "Context ID", "context_id", "contextid") or "").strip()
+        context_text = (G(r, "Context Text", "context_text") or "").strip()
         
-        # If Context ID is present, Context Text must be present and vice versa
-        if bool(context_id) != bool(context_text):
+        if not context_local_id and not context_text:
+            continue
+        
+        if bool(context_local_id) != bool(context_text):
             return False, f"Row {idx}: Context ID and Context Text must both be present or both be absent"
         
-        if context_id:
+        if context_local_id:
             try:
-                int(context_id)
+                int(context_local_id)
             except ValueError:
-                return False, f"Row {idx}: Context ID must be an integer"
+                return False, f"Row {idx}: Context ID must be an integer, got '{context_local_id}'"
     
     return True, None
 
-def extract_metadata_from_filename(filename: str) -> Dict[str, Optional[str]]:
-    """Extract course code, assessment type, etc. from filename"""
-    # Example: DSA1101_Sem1_2425_Midterm_questions.csv
-    parts = filename.replace('.csv', '').split('_')
+def find_attachment_matches(attachments: List[str], referenced_attachment: str) -> List[str]:
+    """Find exact or partial matches for an attachment reference"""
+    if not referenced_attachment:
+        return []
     
-    metadata = {
-        'course_code': None,
-        'assessment_type': None,
-        'academic_year': None,
-        'semester': None
-    }
+    matches = []
+    ref_lower = referenced_attachment.lower()
+    ref_name = Path(referenced_attachment).stem.lower()
     
-    if len(parts) >= 1:
-        metadata['course_code'] = parts[0]
+    for att in attachments:
+        att_lower = att.lower()
+        att_name = Path(att).stem.lower()
+        
+        if Path(att).name.lower() == Path(referenced_attachment).name.lower():
+            matches.append(att)
+        elif att_name == ref_name:
+            matches.append(att)
     
-    # Look for semester pattern
-    for part in parts:
-        if part.lower().startswith('sem'):
-            metadata['semester'] = part
-    
-    # Look for academic year (e.g., 2425)
-    for part in parts:
-        if part.isdigit() and len(part) == 4:
-            metadata['academic_year'] = f"20{part[:2]}/20{part[2:]}"
-    
-    # Assessment type is usually the part before 'questions' or 'context'
-    for i, part in enumerate(parts):
-        if part.lower() in ['questions', 'context']:
-            if i > 0:
-                metadata['assessment_type'] = parts[i-1]
-            break
-    
-    return metadata
+    return matches
 
+
+# ============================================================================
+# API ENDPOINTS
+# ============================================================================
+
+# API #1: Filtered Questions Retrieval
+@router.get("/")
+async def get_questions(
+    id: Optional[int] = Query(None, description="Filter by question ID"),
+    subject: Optional[str] = Query(None, description="Filter by subject/course"),
+    difficulty: Optional[str] = Query(None, description="Filter by difficulty (Low, Med, High)"),
+    type: Optional[str] = Query(None, description="Filter by question type"),
+    semester: Optional[str] = Query(None, description="Filter by semester"),
+    topic: Optional[str] = Query(None, description="Filter by one or more topics"),
+    match: Optional[str] = Query("all", description="Match mode: 'any' (OR) or 'all' (AND) across all filters"),
+    fuzzy: Optional[bool] = Query(True, description="Enable fuzzy matching for topic keywords"),
+    is_latest: Optional[bool] = Query(True, description="Only return latest versions"),
+    db: Session = Depends(get_db)
+):
+    """
+    GET /api/questions
+    Returns all questions with flexible filtering.
+    """
+    try:
+        query_str = """
+            SELECT 
+                q.question_id, 
+                q.question_text, 
+                q.question_type,
+                c.course_code, 
+                c.course_name, 
+                a.assessment_type,
+                a.assessment_acadyear,
+                a.assessment_semester,
+                q.difficulty, 
+                q.concepts, 
+                q.created_at, 
+                q.version_number,
+                q.previous_version_id,
+                q.is_latest
+            FROM questions q
+            LEFT JOIN courses c ON q.course_id = c.course_id
+            LEFT JOIN assessments a ON q.assessment_id = a.assessment_id
+            WHERE 1=1
+        """
+        params = {}
+        conditions = []
+
+        if id is not None:
+            conditions.append("q.question_id = :id")
+            params["id"] = id
+
+        if subject is not None:
+            conditions.append("(c.course_code ILIKE :subject OR c.course_name ILIKE :subject)")
+            params["subject"] = f"%{subject}%"
+
+        if difficulty is not None:
+            conditions.append("q.difficulty ILIKE :difficulty")
+            params["difficulty"] = f"%{difficulty}%"
+
+        if type is not None:
+            conditions.append("q.question_type ILIKE :question_type")
+            params["question_type"] = f"%{type}%"
+
+        if semester is not None:
+            conditions.append("(a.assessment_semester ILIKE :semester OR a.assessment_type ILIKE :semester)")
+            params["semester"] = f"%{semester}%"
+
+        if is_latest:
+            conditions.append("q.is_latest = TRUE")
+
+        if conditions:
+            if match == "any":
+                query_str += " AND (" + " OR ".join(conditions) + ")"
+            else:
+                query_str += " AND " + " AND ".join(conditions)
+
+        base_results = db.execute(text(query_str), params).fetchall()
+
+        if topic:
+            topics = [t.strip().lower() for t in topic.split(",") if t.strip()]
+            filtered_rows = []
+
+            for row in base_results:
+                question_topics = [t.strip().lower() for t in (row.concepts.split(",") if row.concepts else [])]
+
+                topic_matches = []
+                for user_topic in topics:
+                    if fuzzy:
+                        match_found = any(fuzz.partial_ratio(user_topic, qt) > 70 for qt in question_topics)
+                    else:
+                        match_found = any(user_topic in qt for qt in question_topics)
+                    topic_matches.append(match_found)
+
+                if (match == "all" and all(topic_matches)) or (match != "all" and any(topic_matches)):
+                    filtered_rows.append(row)
+        else:
+            filtered_rows = base_results
+
+        questions = []
+        for row in filtered_rows:
+            questions.append({
+                "question_id": row.question_id,
+                "question_text": row.question_text,
+                "question_type": row.question_type,
+                "course_code": row.course_code,
+                "course_name": row.course_name,
+                "assessment_type": row.assessment_type,
+                "assessment_year": row.assessment_acadyear,
+                "assessment_semester": row.assessment_semester,
+                "difficulty": row.difficulty,
+                "concepts": row.concepts.split(',') if row.concepts else [],
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+                "version_number": row.version_number,
+                "previous_version_id": row.previous_version_id,
+                "is_latest": row.is_latest
+            })
+
+        return {"success": True, "count": len(questions), "data": questions}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+
+# API #2: More Question Details
+@router.get("/{id}")
+async def get_question_by_id(id: int, db: Session = Depends(get_db)):
+    """
+    GET /api/questions/:id
+    Returns full question content with context and attachments
+    """
+    try: 
+        query = text("""
+            SELECT 
+                q.*,
+                c.course_code,
+                c.course_name,
+                a.assessment_type,
+                a.assessment_acadyear,
+                a.assessment_semester,
+                ctx.context_text,
+                ctx.context_local_id,
+                STRING_AGG(DISTINCT qa.attachment_name, ', ') as question_attachments,
+                STRING_AGG(DISTINCT ca.attachment_name, ', ') as context_attachments
+            FROM questions q
+            LEFT JOIN courses c ON q.course_id = c.course_id
+            LEFT JOIN assessments a ON q.assessment_id = a.assessment_id
+            LEFT JOIN contexts ctx ON q.context_id = ctx.context_id
+            LEFT JOIN question_attachments qa ON q.question_id = qa.question_id
+            LEFT JOIN context_attachments ca ON ctx.context_id = ca.context_id
+            WHERE q.question_id = :id
+            GROUP BY q.question_id, c.course_code, c.course_name, 
+                     a.assessment_type, a.assessment_acadyear, a.assessment_semester,
+                     ctx.context_text, ctx.context_local_id
+        """)
+    
+        result = db.execute(query, {"id": id})
+        row = result.fetchone()
+        
+        if not row:
+            raise HTTPException(status_code=404, detail="Question not found")
+        
+        response_data = {
+            "question_id": row.question_id,
+            "question_number": row.question_number,
+            "sub_question_number": row.sub_question_number,
+            "question_text": row.question_text,
+            "question_type": row.question_type,
+            "difficulty": row.difficulty,
+            "correct_answer": row.correct_answer,
+            "explanation": row.explanation,
+            "points": float(row.points) if row.points else 1.0,
+            "concepts": row.concepts.split(',') if row.concepts else [],
+            "course_code": row.course_code,
+            "course_name": row.course_name,
+            "assessment_type": row.assessment_type,
+            "assessment_year": row.assessment_acadyear,
+            "assessment_semester": row.assessment_semester,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "version_number": row.version_number,
+            "previous_version_id": row.previous_version_id
+        }
+        
+        if row.question_type in ["MCQ", "MRQ"]:
+            options = {}
+            if row.option_a: options["A"] = row.option_a
+            if row.option_b: options["B"] = row.option_b
+            if row.option_c: options["C"] = row.option_c
+            if row.option_d: options["D"] = row.option_d
+            if row.option_e: options["E"] = row.option_e
+            if options: response_data["options"] = options
+        elif row.question_type == "T/F":
+            response_data["options"] = {
+                "A": row.option_a if row.option_a else "True",
+                "B": row.option_b if row.option_b else "False"
+            }
+        
+        if row.context_text or row.context_attachments:
+            context = {}
+            if row.context_text:
+                context["text"] = row.context_text
+                context["context_id"] = row.context_local_id
+            
+            if row.context_attachments:
+                context_files = []
+                for name in row.context_attachments.split(', '):
+                    if name.strip():
+                        context_files.append({"name": name.strip(), "url": f"/api/attachments/{name.strip()}"})
+                if context_files:
+                    context["attachments"] = context_files
+            
+            if context:
+                response_data["context"] = context
+        
+        if row.question_attachments:
+            question_files = []
+            for name in row.question_attachments.split(', '):
+                if name.strip():
+                    question_files.append({"name": name.strip(), "url": f"/api/attachments/{name.strip()}"})
+            if question_files:
+                response_data["attachments"] = question_files
+        
+        return {"success": True, "data": response_data}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+
+# API #3: Fetching ALL Versions
+@router.get("/{id}/versions")
+async def get_question_versions(id: int, db: Session = Depends(get_db)):
+    """GET /api/questions/{id}/versions - Retrieve all related versions"""
+    try:
+        root_query = text("SELECT question_id, previous_version_id FROM questions WHERE question_id = :id")
+        result = db.execute(root_query, {"id": id})
+        row = result.fetchone()
+
+        if not row:
+            raise HTTPException(status_code=404, detail="Question not found")
+
+        current_id = row.question_id
+        root_id = current_id
+        visited = set()
+        
+        while current_id and current_id not in visited:
+            visited.add(current_id)
+            parent_query = text("SELECT previous_version_id FROM questions WHERE question_id = :id")
+            parent_result = db.execute(parent_query, {"id": current_id}).fetchone()
+            
+            if parent_result and parent_result.previous_version_id:
+                root_id = parent_result.previous_version_id
+                current_id = parent_result.previous_version_id
+            else:
+                root_id = current_id
+                break
+
+        versions_query = text("""
+            WITH RECURSIVE version_tree AS (
+                SELECT * FROM questions WHERE question_id = :root_id
+                UNION ALL
+                SELECT q.* FROM questions q
+                INNER JOIN version_tree vt ON q.previous_version_id = vt.question_id
+            )
+            SELECT
+                vt.question_id, vt.question_text, vt.question_type, vt.version_number,
+                vt.previous_version_id, vt.is_latest, vt.difficulty, vt.concepts, vt.created_at,
+                c.course_code, c.course_name, a.assessment_type, a.assessment_acadyear, a.assessment_semester
+            FROM version_tree vt
+            LEFT JOIN courses c ON vt.course_id = c.course_id
+            LEFT JOIN assessments a ON vt.assessment_id = a.assessment_id
+            ORDER BY vt.version_number ASC, vt.created_at ASC
+        """)
+
+        result = db.execute(versions_query, {"root_id": root_id})
+        rows = result.fetchall()
+
+        if not rows:
+            raise HTTPException(status_code=404, detail="No versions found")
+
+        versions = []
+        for row in rows:
+            versions.append({
+                "question_id": row.question_id,
+                "question_text": row.question_text or "",
+                "question_type": row.question_type or "",
+                "course_code": row.course_code or "",
+                "course_name": row.course_name or "",
+                "assessment_type": row.assessment_type or "",
+                "assessment_year": row.assessment_acadyear or "",
+                "assessment_semester": row.assessment_semester or "",
+                "difficulty": row.difficulty or "",
+                "concepts": row.concepts.split(',') if row.concepts else [],
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+                "version_number": row.version_number,
+                "previous_version_id": row.previous_version_id,
+                "is_latest": row.is_latest
+            })
+
+        return {"success": True, "root_id": root_id, "version_count": len(versions), "data": versions}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+
+# API #4: Uploading new question version
+@router.post("/edit", response_model=UploadPreviewResponse)
+async def upload_edit(id: int, file: UploadFile = File(...)):
+    """Step 1: Upload edited question CSV/ZIP and preview, using same logic as API 5."""
+    upload_id = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    temp_dir = Path(tempfile.mkdtemp(prefix=f"edit_{upload_id}_"))
+
+    try:
+        file_path = temp_dir / file.filename
+        with open(file_path, 'wb') as f:
+            f.write(await file.read())
+
+        questions_csv_path = None
+        attachments = []
+        attachment_paths = {}
+        questions_data = []
+
+        if file.filename.endswith(".zip"):
+            with zipfile.ZipFile(file_path, 'r') as zip_ref:
+                zip_ref.extractall(temp_dir)
+            for csv_file in temp_dir.rglob("*.csv"):
+                if "question" in csv_file.name.lower() and "__MACOSX" not in str(csv_file):
+                    questions_csv_path = csv_file
+                    break
+            for f in temp_dir.rglob("*"):
+                if f.is_file() and f.suffix.lower() != ".csv":
+                    attachments.append(f.name)
+                    attachment_paths[f.name] = str(f)
+        elif file.filename.endswith(".csv"):
+            questions_csv_path = file_path
+        else:
+            raise HTTPException(status_code=400, detail="File must be CSV or ZIP")
+
+        if not questions_csv_path or not questions_csv_path.exists():
+            raise HTTPException(status_code=400, detail="Questions CSV not found in upload")
+
+        # Read CSV rows
+        questions_data = read_csv_rows(questions_csv_path)
+
+        if len(questions_data) != 1:
+            raise HTTPException(status_code=400, detail="Edit must contain exactly ONE question")
+
+        # Convert fields for preview to avoid type errors (use same as API 5)
+        questions_preview = []
+        for q in questions_data:
+            qnum_raw = (G(q, "Question Number", "question_number") or "").strip()
+            sqnum_raw = (G(q, "Sub-Question Number", "sub_question_number") or "").strip()
+            qnum = int(qnum_raw) if qnum_raw else None
+            sqnum = int(sqnum_raw) if sqnum_raw else None
+
+            pts_txt = (G(q, "Points", "points") or "").strip()
+            pts = float(pts_txt) if pts_txt else None
+
+            questions_preview.append(
+                QuestionPreview(
+                    question_number=qnum,
+                    sub_question_number=sqnum,
+                    question_text=(G(q, "Question Text", "question_text") or "").strip(),
+                    question_type=(G(q, "Question Type", "question_type") or "").strip() or None,
+                    option_a=(G(q, "Option A", "option_a") or None),
+                    option_b=(G(q, "Option B", "option_b") or None),
+                    option_c=(G(q, "Option C", "option_c") or None),
+                    option_d=(G(q, "Option D", "option_d") or None),
+                    option_e=(G(q, "Option E", "option_e") or None),
+                    correct_answer=(G(q, "Correct Answer", "correct_answer") or None),
+                    explanation=(G(q, "Explanation", "explanation") or None),
+                    points=pts,
+                    difficulty=(G(q, "Difficulty", "difficulty") or "").strip() or None,
+                    concepts=(G(q, "Concepts", "concepts", "concept") or "").strip() or None,
+                    attachment=(G(q, "Attachment", "attachment") or "").strip() or None,
+                    context_id=(G(q, "Context ID", "context_id", "contextid") or "").strip() or None
+                )
+            )
+
+        # Store upload data for confirm/delete
+        pending_uploads[upload_id] = {
+            "temp_dir": str(temp_dir),
+            "questions_data": questions_data,
+            "attachments": attachments,
+            "attachment_paths": attachment_paths,
+            "previous_question_id": id,
+            "created_at": datetime.now().isoformat()
+        }
+
+        return UploadPreviewResponse(
+            upload_id=upload_id,
+            questions=questions_preview,
+            contexts=[],  # no context edits here
+            attachments=attachments,
+            course_code=None,
+            assessment_type=None,
+            academic_year=None,
+            semester=None,
+            debug_info={"questions_count": len(questions_preview)}
+        )
+
+    except Exception as e:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        raise HTTPException(status_code=500, detail=f"Error processing upload: {str(e)}")
+
+@router.post("/confirm-edits", response_model=ConfirmUploadResponse)
+def confirm_edit(request: ConfirmUploadRequest):
+    """Step 2: Confirm edit and commit to DB using same safe pipeline as API 5."""
+    upload_id = request.upload_id
+    if upload_id not in pending_uploads:
+        raise HTTPException(status_code=404, detail=f"Upload {upload_id} not found")
+
+    upload_data = pending_uploads[upload_id]
+    temp_dir = Path(upload_data['temp_dir'])
+    session = SessionLocal()
+    try:
+        questions_data = upload_data['questions_data']
+        prev_id = upload_data['previous_question_id']
+        questions_inserted = 0
+        attachments_copied = 0
+
+        # Get existing question for versioning
+        current_version = session.execute(
+            text("SELECT version_number, course_id, assessment_id FROM questions WHERE question_id=:id"),
+            {"id": prev_id}
+        ).fetchone()
+
+        if not current_version:
+            raise HTTPException(status_code=404, detail=f"Original question ID {prev_id} not found")
+
+        # Mark old version as not latest
+        session.execute(
+            text("UPDATE questions SET is_latest = FALSE WHERE question_id=:id"),
+            {"id": prev_id}
+        )
+
+        for r in questions_data:
+            qnum_raw = (G(r, "Question Number", "question_number") or "").strip()
+            sqnum_raw = (G(r, "Sub-Question Number", "sub_question_number") or "").strip()
+            qnum = int(qnum_raw) if qnum_raw else None
+            sqnum = int(sqnum_raw) if sqnum_raw else None
+
+            pts_txt = (G(r, "Points", "points") or "").strip()
+            pts = float(pts_txt) if pts_txt else None
+
+            res = session.execute(
+                text("""
+                    INSERT INTO questions (
+                        assessment_id, course_id, context_id, question_number, sub_question_number,
+                        question_text, question_type, option_a, option_b, option_c, option_d, option_e,
+                        correct_answer, explanation, points, difficulty, concepts,
+                        version_number, previous_version_id, is_latest
+                    ) VALUES (
+                        :aid, :cid, NULL, :qnum, :sqnum, :qtxt, :qtype, :a, :b, :c, :d, :e,
+                        :ans, :expl, :pts, :diff, :conc, :ver, :prev_id, TRUE
+                    )
+                    RETURNING question_id
+                """),
+                {
+                    "aid": current_version.assessment_id,
+                    "cid": current_version.course_id,
+                    "qnum": qnum,
+                    "sqnum": sqnum,
+                    "qtxt": (G(r, "Question Text", "question_text") or "").strip(),
+                    "qtype": (G(r, "Question Type", "question_type") or "").strip() or None,
+                    "a": (G(r, "Option A", "option_a") or None),
+                    "b": (G(r, "Option B", "option_b") or None),
+                    "c": (G(r, "Option C", "option_c") or None),
+                    "d": (G(r, "Option D", "option_d") or None),
+                    "e": (G(r, "Option E", "option_e") or None),
+                    "ans": (G(r, "Correct Answer", "correct_answer") or None),
+                    "expl": (G(r, "Explanation", "explanation") or None),
+                    "pts": pts,
+                    "diff": (G(r, "Difficulty", "difficulty") or None),
+                    "conc": (G(r, "Concepts", "concepts", "concept") or None),
+                    "ver": current_version.version_number + 1,
+                    "prev_id": prev_id
+                }
+            )
+            new_qid = res.scalar()
+            questions_inserted += 1
+
+        session.commit()
+        del pending_uploads[upload_id]
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+        return ConfirmUploadResponse(
+            success=True,
+            message=f"Successfully updated {questions_inserted} question(s)",
+            upload_id=upload_id,
+            questions_inserted=questions_inserted,
+            contexts_inserted=0,
+            attachments_copied=attachments_copied
+        )
+
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(status_code=500, detail=f"Confirm failed: {str(e)}")
+    finally:
+        session.close()
+
+@router.post("/delete-edits", response_model=CancelUploadResponse)
+def delete_edit(request: CancelUploadRequest = Body(...)):
+    """Step 3: Cancel pending edit upload."""
+    upload_id = request.upload_id
+    if upload_id not in pending_uploads:
+        raise HTTPException(status_code=404, detail=f"Upload {upload_id} not found")
+    upload_data = pending_uploads[upload_id]
+    temp_dir = Path(upload_data['temp_dir'])
+    if temp_dir.exists():
+        shutil.rmtree(temp_dir, ignore_errors=True)
+    del pending_uploads[upload_id]
+    return CancelUploadResponse(success=True, message="Edit upload cancelled", upload_id=upload_id)
+
+
+
+# API #5: Upload (Preview)
 @router.post("/upload", response_model=UploadPreviewResponse)
 async def upload_assessment(file: UploadFile = File(...)):
-    """
-    Step 1-3: Upload CSV or ZIP, parse files, return preview
-    """
-    upload_id = datetime.now().strftime("%Y%m%d_%H%M%S")
-    temp_dir = Path(tempfile.mkdtemp())
+    """Step 1: Upload CSV or ZIP, parse files, return preview."""
+    upload_id = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    temp_dir = Path(tempfile.mkdtemp(prefix=f"upload_{upload_id}_"))
+    
+    logger.info(f"=== Starting upload {upload_id} ===")
     
     try:
-        # Save uploaded file
         file_path = temp_dir / file.filename
         with open(file_path, 'wb') as f:
             content = await file.read()
@@ -709,102 +796,122 @@ async def upload_assessment(file: UploadFile = File(...)):
         questions_data = []
         contexts_data = []
         attachments = []
+        attachment_paths = {}
         questions_csv_path = None
         context_csv_path = None
         metadata = {}
         
-        # Handle ZIP file
         if file.filename.endswith('.zip'):
             with zipfile.ZipFile(file_path, 'r') as zip_ref:
                 zip_ref.extractall(temp_dir)
             
-            # Find CSV files
             for csv_file in temp_dir.rglob('*.csv'):
-                if 'questions' in csv_file.name.lower():
-                    questions_csv_path = csv_file
-                    metadata = extract_metadata_from_filename(csv_file.name)
-                elif 'context' in csv_file.name.lower():
-                    context_csv_path = csv_file
+                if '__MACOSX' in str(csv_file) or csv_file.name.startswith('.'):
+                    continue
+                
+                meta = parse_meta_from_filename(csv_file.name)
+                if meta:
+                    course_code, assessment_type, kind, ay, sem = meta
+                    if kind == "questions":
+                        questions_csv_path = csv_file
+                        metadata = {
+                            'course_code': course_code,
+                            'assessment_type': assessment_type,
+                            'academic_year': f"20{ay[:2]}/20{ay[2:]}" if ay else None,
+                            'semester': sem
+                        }
+                    elif kind == "contexts":
+                        context_csv_path = csv_file
             
-            # Find attachments
-            for ext in ['*.png', '*.jpg', '*.jpeg', '*.pdf', '*.r', '*.R']:
-                attachments.extend([f.name for f in temp_dir.rglob(ext)])
+            for f in temp_dir.rglob('*'):
+                if f.is_file() and not f.suffix.lower() == '.csv':
+                    if '__MACOSX' not in str(f) and not f.name.startswith('.'):
+                        attachments.append(f.name)
+                        attachment_paths[f.name] = str(f)
         
-        # Handle single CSV file
         elif file.filename.endswith('.csv'):
-            if 'questions' not in file.filename.lower():
-                raise HTTPException(
-                    status_code=400, 
-                    detail="Single CSV file must be questions.csv"
-                )
+            meta = parse_meta_from_filename(file.filename)
+            if not meta:
+                raise HTTPException(status_code=400, detail="Invalid CSV filename format")
+            
+            course_code, assessment_type, kind, ay, sem = meta
+            if kind != "questions":
+                raise HTTPException(status_code=400, detail="Single CSV file must be a questions file")
+            
             questions_csv_path = file_path
-            metadata = extract_metadata_from_filename(file.filename)
+            metadata = {
+                'course_code': course_code,
+                'assessment_type': assessment_type,
+                'academic_year': f"20{ay[:2]}/20{ay[2:]}" if ay else None,
+                'semester': sem
+            }
         else:
-            raise HTTPException(
-                status_code=400,
-                detail="File must be CSV or ZIP"
-            )
+            raise HTTPException(status_code=400, detail="File must be CSV or ZIP")
         
-        # Validate questions CSV exists
         if not questions_csv_path or not questions_csv_path.exists():
-            raise HTTPException(
-                status_code=400,
-                detail="questions.csv not found in upload"
-            )
+            raise HTTPException(status_code=400, detail="questions.csv not found in upload")
         
-        # Parse questions CSV
-        questions_data = parse_csv_to_dict(questions_csv_path)
-        is_valid, error_msg = validate_questions_csv(questions_data)
+        questions_data = read_csv_rows(questions_csv_path)
+        is_valid, error_msg = validate_questions_data(questions_data)
         if not is_valid:
             raise HTTPException(status_code=400, detail=f"Invalid questions.csv: {error_msg}")
         
-        # Parse context CSV if exists
         if context_csv_path and context_csv_path.exists():
-            contexts_data = parse_csv_to_dict(context_csv_path)
-            is_valid, error_msg = validate_context_csv(contexts_data)
+            contexts_data = read_csv_rows(context_csv_path)
+            is_valid, error_msg = validate_context_data(contexts_data)
             if not is_valid:
                 raise HTTPException(status_code=400, detail=f"Invalid context.csv: {error_msg}")
         
-        # Convert to preview models
-        questions_preview = [
-            QuestionPreview(
-                question_number=int(q.get('Question Number', 0)) if q.get('Question Number', '').strip() else None,
-                sub_question_number=int(q.get('Sub-Question Number', 0)) if q.get('Sub-Question Number', '').strip() else None,
-                question_text=q['Question Text'],
-                question_type=q['Question Type'],
-                option_a=q.get('Option A') or None,
-                option_b=q.get('Option B') or None,
-                option_c=q.get('Option C') or None,
-                option_d=q.get('Option D') or None,
-                option_e=q.get('Option E') or None,
-                correct_answer=q.get('Correct Answer') or None,
-                explanation=q.get('Explanation') or None,
-                points=float(q['Points']) if q.get('Points', '').strip() else None,
-                difficulty=q['Difficulty'],
-                concepts=q['Concepts'],
-                attachment=q.get('Attachment') or None,
-                context_id=q.get('Context ID') or None
-            )
-            for q in questions_data
-        ]
+        questions_preview = []
+        for q in questions_data:
+            qtext = (G(q, "Question Text", "question_text") or "").strip()
+            if not qtext:
+                continue
+            
+            qnum = (G(q, "Question Number", "question_number") or "").strip()
+            sqnum = (G(q, "Sub-Question Number", "sub_question_number") or "").strip()
+            pts_txt = (G(q, "Points", "points") or "").strip()
+            
+            questions_preview.append(QuestionPreview(
+                question_number=int(qnum) if qnum else None,
+                sub_question_number=int(sqnum) if sqnum else None,
+                question_text=qtext,
+                question_type=(G(q, "Question Type", "question_type") or "").strip() or None,
+                option_a=(G(q, "Option A", "option_a") or None),
+                option_b=(G(q, "Option B", "option_b") or None),
+                option_c=(G(q, "Option C", "option_c") or None),
+                option_d=(G(q, "Option D", "option_d") or None),
+                option_e=(G(q, "Option E", "option_e") or None),
+                correct_answer=(G(q, "Correct Answer", "correct_answer") or None),
+                explanation=(G(q, "Explanation", "explanation") or None),
+                points=float(pts_txt) if pts_txt else None,
+                difficulty=(G(q, "Difficulty", "difficulty") or "").strip() or None,
+                concepts=(G(q, "Concepts", "concepts", "concept") or "").strip() or None,
+                attachment=(G(q, "Attachment", "attachment") or "").strip() or None,
+                context_id=(G(q, "Context ID", "context_id", "contextid") or "").strip() or None
+            ))
         
-        contexts_preview = [
-            ContextPreview(
-                context_id=c['Context ID'],
-                context_text=c['Context Text'],
-                attachment=c.get('Attachment') or None
-            )
-            for c in contexts_data
-            if c.get('Context ID', '').strip()
-        ]
+        contexts_preview = []
+        for c in contexts_data:
+            context_id = (G(c, "Context ID", "context_id", "contextid") or "").strip()
+            context_text = (G(c, "Context Text", "context_text") or "").strip()
+            if context_id and context_text:
+                contexts_preview.append(ContextPreview(
+                    context_id=context_id,
+                    context_text=context_text,
+                    attachment=(G(c, "Attachment", "attachment") or "").strip() or None
+                ))
         
-        # Store in temporary cache
         pending_uploads[upload_id] = {
             'temp_dir': str(temp_dir),
             'questions_data': questions_data,
             'contexts_data': contexts_data,
             'attachments': attachments,
-            'metadata': metadata
+            'attachment_paths': attachment_paths,
+            'metadata': metadata,
+            'questions_csv_path': str(questions_csv_path),
+            'context_csv_path': str(context_csv_path) if context_csv_path else None,
+            'created_at': datetime.now().isoformat()
         }
         
         return UploadPreviewResponse(
@@ -815,220 +922,211 @@ async def upload_assessment(file: UploadFile = File(...)):
             course_code=metadata.get('course_code'),
             assessment_type=metadata.get('assessment_type'),
             academic_year=metadata.get('academic_year'),
-            semester=metadata.get('semester')
+            semester=metadata.get('semester'),
+            debug_info={'questions_count': len(questions_preview), 'contexts_count': len(contexts_preview)}
         )
     
+    except HTTPException:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        raise
     except Exception as e:
         shutil.rmtree(temp_dir, ignore_errors=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Error processing upload: {str(e)}")
 
-@router.post("/confirm-upload")
+
+# API #5: Confirm Upload
+@router.post("/confirm-upload", response_model=ConfirmUploadResponse)
 async def confirm_upload(request: ConfirmUploadRequest):
-    """
-    Step 4-9: Process confirmed upload, map data, store in DB, backup
-    """
-    if request.upload_id not in pending_uploads:
-        raise HTTPException(status_code=404, detail="Upload not found or expired")
+    """Step 2: Confirm upload and commit to database."""
+    upload_id = request.upload_id
     
-    upload_data = pending_uploads[request.upload_id]
-    temp_dir = Path(upload_data['temp_dir'])
-    
-    try:
-        conn = get_db_connection()
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        
-        # Get or create course
-        cur.execute(
-            "SELECT course_id FROM courses WHERE course_code = %s",
-            (request.course_code,)
-        )
-        course_result = cur.fetchone()
-        
-        if course_result:
-            course_id = course_result['course_id']
-        else:
-            cur.execute(
-                "INSERT INTO courses (course_code, course_name) VALUES (%s, %s) RETURNING course_id",
-                (request.course_code, request.course_code)  # Use course_code as name if not provided
-            )
-            course_id = cur.fetchone()['course_id']
-        
-        # Create assessment
-        cur.execute(
-            """
-            INSERT INTO assessments (course_id, assessment_type, assessment_acadyear, assessment_semester)
-            VALUES (%s, %s, %s, %s)
-            RETURNING assessment_id
-            """,
-            (course_id, request.assessment_type, request.academic_year, request.semester)
-        )
-        assessment_id = cur.fetchone()['assessment_id']
-        
-        # Map contexts
-        context_map = {}  # Maps local context_id to DB context_id
-        
-        for ctx in upload_data['contexts_data']:
-            context_local_id = ctx.get('Context ID', '').strip()
-            if not context_local_id:
-                continue
-            
-            cur.execute(
-                """
-                INSERT INTO contexts (assessment_id, course_id, context_local_id, context_text)
-                VALUES (%s, %s, %s, %s)
-                RETURNING context_id
-                """,
-                (assessment_id, course_id, context_local_id, ctx['Context Text'])
-            )
-            db_context_id = cur.fetchone()['context_id']
-            context_map[context_local_id] = db_context_id
-            
-            # Handle context attachments
-            attachment_str = ctx.get('Attachment', '').strip()
-            if attachment_str:
-                attachment_names = [a.strip() for a in attachment_str.split(',')]
-                for att_name in attachment_names:
-                    cur.execute(
-                        """
-                        INSERT INTO context_attachments (context_id, attachment_name, attachment_url)
-                        VALUES (%s, %s, %s)
-                        """,
-                        (db_context_id, att_name, f"/storage/png/{att_name}")
-                    )
-        
-        # Insert questions
-        for q in upload_data['questions_data']:
-            context_local_id = q.get('Context ID', '').strip()
-            db_context_id = context_map.get(context_local_id) if context_local_id else None
-            
-            cur.execute(
-                """
-                INSERT INTO questions (
-                    assessment_id, course_id, context_id, question_number, sub_question_number,
-                    question_text, question_type, option_a, option_b, option_c, option_d, option_e,
-                    correct_answer, explanation, points, difficulty, concepts
-                )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                RETURNING question_id
-                """,
-                (
-                    assessment_id, course_id, db_context_id,
-                    int(q['Question Number']) if q.get('Question Number', '').strip() else None,
-                    int(q['Sub-Question Number']) if q.get('Sub-Question Number', '').strip() else None,
-                    q['Question Text'], q['Question Type'],
-                    q.get('Option A') or None, q.get('Option B') or None,
-                    q.get('Option C') or None, q.get('Option D') or None, q.get('Option E') or None,
-                    q.get('Correct Answer') or None, q.get('Explanation') or None,
-                    float(q['Points']) if q.get('Points', '').strip() else None,
-                    q['Difficulty'], q['Concepts']
-                )
-            )
-            question_id = cur.fetchone()['question_id']
-            
-            # Handle question attachments
-            attachment_str = q.get('Attachment', '').strip()
-            if attachment_str:
-                attachment_names = [a.strip() for a in attachment_str.split(',')]
-                for att_name in attachment_names:
-                    cur.execute(
-                        """
-                        INSERT INTO question_attachments (question_id, attachment_name, attachment_url)
-                        VALUES (%s, %s, %s)
-                        """,
-                        (question_id, att_name, f"/storage/png/{att_name}")
-                    )
-        
-        conn.commit()
-        
-        # Copy attachments to storage
-        for attachment in upload_data['attachments']:
-            for src_file in temp_dir.rglob(attachment):
-                dest_file = STORAGE_PNG_PATH / attachment
-                shutil.copy2(src_file, dest_file)
-                break
-        
-        # Create dated upload folder for ingest script
-        dated_folder = UPLOADS_BASE_PATH / datetime.now().strftime("%Y-%m-%d_%H%M%S")
-        dated_folder.mkdir(parents=True, exist_ok=True)
-        
-        # Copy CSV files to dated folder
-        for csv_file in temp_dir.rglob('*.csv'):
-            shutil.copy2(csv_file, dated_folder / csv_file.name)
-        
-        # Copy attachments to dated folder
-        if upload_data['attachments']:
-            images_dir = dated_folder / "images"
-            images_dir.mkdir(exist_ok=True)
-            for attachment in upload_data['attachments']:
-                for src_file in temp_dir.rglob(attachment):
-                    shutil.copy2(src_file, images_dir / attachment)
-                    break
-        
-        # Run backup via ingest script if it exists
-        if INGEST_SCRIPT.exists():
-            try:
-                subprocess.run(
-                    [str(INGEST_SCRIPT), str(dated_folder)],
-                    check=True,
-                    capture_output=True,
-                    text=True
-                )
-            except subprocess.CalledProcessError as e:
-                print(f"Warning: Backup script failed: {e.stderr}")
-        
-        # Cleanup
-        cur.close()
-        conn.close()
-        shutil.rmtree(temp_dir, ignore_errors=True)
-        del pending_uploads[request.upload_id]
-        
-        return JSONResponse(content={
-            "message": "Upload successful",
-            "assessment_id": assessment_id,
-            "course_id": course_id
-        })
-    
-    except Exception as e:
-        if 'conn' in locals():
-            conn.rollback()
-            conn.close()
-        shutil.rmtree(temp_dir, ignore_errors=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.delete("/cancel-upload/{upload_id}")
-async def cancel_upload(upload_id: str):
-    """Cancel a pending upload and cleanup temporary files"""
     if upload_id not in pending_uploads:
-        raise HTTPException(status_code=404, detail="Upload not found")
+        raise HTTPException(status_code=404, detail=f"Upload {upload_id} not found")
     
     upload_data = pending_uploads[upload_id]
     temp_dir = Path(upload_data['temp_dir'])
     
-    shutil.rmtree(temp_dir, ignore_errors=True)
-    del pending_uploads[upload_id]
+    if not SessionLocal:
+        raise HTTPException(status_code=500, detail="Database connection not available")
     
-    return JSONResponse(content={"message": "Upload cancelled"})
+    session = SessionLocal()
+    questions_inserted = 0
+    contexts_inserted = 0
+    attachments_copied = 0
+    
+    try:
+        questions_data = upload_data['questions_data']
+        contexts_data = upload_data['contexts_data']
+        attachments = upload_data['attachments']
+        attachment_paths = upload_data['attachment_paths']
+        metadata = upload_data['metadata']
+        
+        course_code = metadata['course_code']
+        assessment_type = metadata['assessment_type']
+        ay = metadata.get('academic_year')
+        sem = metadata.get('semester')
+        
+        course_id = session.execute(text("SELECT course_id FROM courses WHERE course_code = :code LIMIT 1"), {"code": course_code}).scalar()
+        if not course_id:
+            result = session.execute(text("INSERT INTO courses (course_code, course_name) VALUES (:code, :name) RETURNING course_id"), {"code": course_code, "name": course_code})
+            course_id = result.scalar()
+        
+        assessment_id = session.execute(
+            text("SELECT assessment_id FROM assessments WHERE course_id = :cid AND assessment_type = :at AND COALESCE(assessment_acadyear, '') = COALESCE(:ay, '') AND COALESCE(assessment_semester, '') = COALESCE(:sem, '') LIMIT 1"),
+            {"cid": course_id, "at": assessment_type, "ay": ay, "sem": sem}
+        ).scalar()
+        
+        if not assessment_id:
+            result = session.execute(
+                text("INSERT INTO assessments (course_id, assessment_type, assessment_acadyear, assessment_semester) VALUES (:cid, :at, :ay, :sem) RETURNING assessment_id"),
+                {"cid": course_id, "at": assessment_type, "ay": ay, "sem": sem}
+            )
+            assessment_id = result.scalar()
+        
+        session.commit()
+        
+        context_id_map = {}
+        for r in contexts_data:
+            context_local_id = (G(r, "Context ID", "context_id", "contextid") or "").strip()
+            context_text = (G(r, "Context Text", "context_text") or "").strip()
+            if not context_local_id or not context_text:
+                continue
+            
+            res = session.execute(
+                text("INSERT INTO contexts (assessment_id, course_id, context_local_id, context_text) VALUES (:aid, :cid, :clid, :ctxt) ON CONFLICT (assessment_id, context_local_id) DO UPDATE SET context_text = EXCLUDED.context_text RETURNING context_id"),
+                {"aid": assessment_id, "cid": course_id, "clid": context_local_id, "ctxt": context_text}
+            )
+            ctx_id = res.scalar()
+            context_id_map[context_local_id] = ctx_id
+            contexts_inserted += 1
+        
+        session.commit()
+        
+        for r in questions_data:
+            qtext = (G(r, "Question Text", "question_text") or "").strip()
+            if not qtext:
+                continue
+            
+            ctx_local = (G(r, "Context ID", "context_id", "contextid") or "").strip()
+            qnum = (G(r, "Question Number", "question_number") or "").strip() or None
+            sqnum = (G(r, "Sub-Question Number", "sub_question_number") or "").strip() or None
+            qtype = (G(r, "Question Type", "question_type") or "").strip() or None
+            a = (G(r, "Option A", "option_a") or None)
+            b = (G(r, "Option B", "option_b") or None)
+            c = (G(r, "Option C", "option_c") or None)
+            d = (G(r, "Option D", "option_d") or None)
+            e = (G(r, "Option E", "option_e") or None)
+            ans = (G(r, "Correct Answer", "correct_answer") or None)
+            expl = (G(r, "Explanation", "explanation") or None)
+            pts_txt = (G(r, "Points", "points") or "").strip()
+            diff = (G(r, "Difficulty", "difficulty") or None)
+            conc = (G(r, "Concepts", "concepts", "concept") or None)
+            qatt = (G(r, "Attachment", "attachment") or "").strip()
+            
+            pts = float(pts_txt) if pts_txt else None
+            ctx_id = context_id_map.get(ctx_local) if ctx_local else None
+            
+            res = session.execute(
+                text("""
+                    INSERT INTO questions (
+                        assessment_id, course_id, context_id, question_number, sub_question_number,
+                        question_text, question_type, option_a, option_b, option_c, option_d, option_e,
+                        correct_answer, explanation, points, difficulty, concepts, version_number, is_latest
+                    ) VALUES (
+                        :aid, :cid, :ctx, :qnum, :sqnum, :qtxt, :qtype, :a, :b, :c, :d, :e,
+                        :ans, :expl, :pts, :diff, :conc, 1, TRUE
+                    )
+                    ON CONFLICT (course_id, assessment_id, question_text)
+                    DO UPDATE SET question_type = EXCLUDED.question_type, option_a = EXCLUDED.option_a,
+                        option_b = EXCLUDED.option_b, option_c = EXCLUDED.option_c, option_d = EXCLUDED.option_d,
+                        option_e = EXCLUDED.option_e, correct_answer = EXCLUDED.correct_answer,
+                        explanation = EXCLUDED.explanation, points = EXCLUDED.points,
+                        difficulty = EXCLUDED.difficulty, concepts = EXCLUDED.concepts,
+                        context_id = COALESCE(EXCLUDED.context_id, questions.context_id), is_latest = TRUE
+                    RETURNING question_id
+                """),
+                {"aid": assessment_id, "cid": course_id, "ctx": ctx_id, "qnum": qnum, "sqnum": sqnum,
+                 "qtxt": qtext, "qtype": qtype, "a": a, "b": b, "c": c, "d": d, "e": e,
+                 "ans": ans, "expl": expl, "pts": pts, "diff": diff, "conc": conc}
+            )
+            qid = res.scalar()
+            questions_inserted += 1
+            
+            if qid and qatt:
+                session.execute(
+                    text("INSERT INTO question_attachments (question_id, attachment_name, attachment_url) VALUES (:qid, :name, NULL) ON CONFLICT (question_id, attachment_name) DO NOTHING"),
+                    {"qid": qid, "name": qatt}
+                )
+        
+        session.commit()
+        
+        for att_name, att_path in attachment_paths.items():
+            try:
+                source = Path(att_path)
+                if source.exists():
+                    target_dir = STORAGE_PNG_PATH if att_name.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.svg')) else STORAGE_PNG_PATH.parent / "other"
+                    target_dir.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(source, target_dir / att_name)
+                    attachments_copied += 1
+            except Exception as e:
+                logger.error(f"Failed to copy attachment {att_name}: {e}")
+        
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        del pending_uploads[upload_id]
+        
+        return ConfirmUploadResponse(
+            success=True,
+            message=f"Successfully uploaded {questions_inserted} questions",
+            upload_id=upload_id,
+            questions_inserted=questions_inserted,
+            contexts_inserted=contexts_inserted,
+            attachments_copied=attachments_copied
+        )
+    
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to confirm upload: {str(e)}")
+    finally:
+        session.close()
 
-# API #6: Version Diff 
+
+# API #5: Cancel Upload
+@router.post("/cancel-upload", response_model=CancelUploadResponse)
+def cancel_upload(request: CancelUploadRequest = Body(...)):
+    """Step 3: Cancel a pending upload."""
+    upload_id = request.upload_id
+    
+    if upload_id not in pending_uploads:
+        raise HTTPException(status_code=404, detail=f"Upload {upload_id} not found")
+    
+    try:
+        upload_data = pending_uploads[upload_id]
+        temp_dir = Path(upload_data['temp_dir'])
+        if temp_dir.exists():
+            shutil.rmtree(temp_dir, ignore_errors=True)
+        del pending_uploads[upload_id]
+        
+        return CancelUploadResponse(success=True, message="Upload cancelled successfully", upload_id=upload_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to cancel upload: {str(e)}")
+
+
+# API #6: Version Diff
 def highlight_changes(old_text: str, new_text: str) -> Dict[str, str]:
     """Generate inline highlighted HTML showing additions and deletions"""
     if old_text == new_text:
         return None
     
-    # If texts are too different (less than 30% similarity), show them separately without char-by-char diff
     similarity = SequenceMatcher(None, old_text, new_text).ratio()
-    
-    if similarity < 0.3:  # Less than 30% similar - show full replacement
+    if similarity < 0.3:
         return {
             "previous": f'<span style="background-color: #ffc0c0; text-decoration: line-through;">{old_text}</span>' if old_text else "",
             "current": f'<span style="background-color: #c0ffc0; font-weight: bold;">{new_text}</span>' if new_text else "",
             "type": "complete_change"
         }
     
-    # For similar texts, do word-level diff instead of character-level
     old_words = old_text.split()
     new_words = new_text.split()
-    
     s = SequenceMatcher(None, old_words, new_words)
     old_html = []
     new_html = []
@@ -1048,27 +1146,17 @@ def highlight_changes(old_text: str, new_text: str) -> Dict[str, str]:
             old_html.append(f'<span style="background-color: #ffc0c0; text-decoration: line-through;">{old_chunk}</span>')
             new_html.append(f'<span style="background-color: #c0ffc0; font-weight: bold;">{new_chunk}</span>')
         
-        # Add space between words
         if tag != 'equal' and i2 < len(old_words):
             old_html.append(' ')
         if tag != 'equal' and j2 < len(new_words):
             new_html.append(' ')
     
-    return {
-        "previous": ''.join(old_html),
-        "current": ''.join(new_html),
-        "type": "partial_change"
-    }
+    return {"previous": ''.join(old_html), "current": ''.join(new_html), "type": "partial_change"}
 
 
-# Update your API endpoint
 @router.get("/{id}/diff/{version_id}")
 async def get_question_diff(id: int, version_id: int, db: Session = Depends(get_db)):
-    """
-    Compare two versions of a question and return user-friendly colored differences.
-    """
-    
-    # Fetch both versions
+    """Compare two versions of a question"""
     query = text("SELECT * FROM questions WHERE question_id IN (:id, :version_id)")
     result = db.execute(query, {"id": id, "version_id": version_id}).fetchall()
     
@@ -1089,12 +1177,12 @@ async def get_question_diff(id: int, version_id: int, db: Session = Depends(get_
         "option_d": "Option D",
         "option_e": "Option E",
         "correct_answer": "Correct Answer",
+        "explanation": "Explanation",
         "difficulty": "Difficulty",
         "concepts": "Concepts"
     }
 
     differences = []
-
     for field, label in fields_to_compare.items():
         old_val = str(previous.get(field) or "")
         new_val = str(current.get(field) or "")
@@ -1120,49 +1208,93 @@ async def get_question_diff(id: int, version_id: int, db: Session = Depends(get_
     }
 
 
-# API #7: Suggest Question Variants by semantic similarity
+# API #7: Suggest Question Variants
 @router.get("/{id}/suggestions")
-async def get_question_suggestions(id: int, db: Session = Depends(get_db), top_n: int = 5):
-    """
-    Suggest variant questions based on semantic similarity (TF-IDF).
-
-    GET /api/questions/{id}/suggestions
-    """
-    # Fetch all questions
-    result = db.execute(text("SELECT question_id, question_text, concepts FROM questions"))
-    questions = result.fetchall()
-
-    if not questions:
-        raise HTTPException(status_code=404, detail="No questions found in database")
-
-    # Build lists
-    ids = [q.question_id for q in questions]
-    texts = [
-        (q.question_text or "") + " " + (q.concepts or "")
-        for q in questions
-    ]
-
-    if id not in ids:
-        raise HTTPException(status_code=404, detail="Question not found")
-
-    idx = ids.index(id)
-
-    # Compute TF-IDF similarity
-    vectorizer = TfidfVectorizer(stop_words="english")
-    tfidf_matrix = vectorizer.fit_transform(texts)
-    similarities = cosine_similarity(tfidf_matrix[idx:idx+1], tfidf_matrix).flatten()
-
-    # Get top N most similar (excluding itself)
-    similar_indices = np.argsort(similarities)[::-1][1:top_n+1]
-    suggestions = [
-        {"question_id": int(ids[i]), "similarity": round(float(similarities[i]), 3)}
-        for i in similar_indices
-    ]
-
-    return {
-        "success": True,
-        "question_id": id,
-        "suggested_variants": suggestions
-    }
-
-
+async def get_question_suggestions(id: int, db: Session = Depends(get_db), top_n: int = Query(5)):
+    """Suggest variant questions based on course, difficulty, type, and concepts"""
+    try:
+        ref_query = text("""
+            SELECT q.question_id, q.question_text, q.question_type, q.difficulty, q.concepts, q.course_id, c.course_code
+            FROM questions q
+            LEFT JOIN courses c ON q.course_id = c.course_id
+            WHERE q.question_id = :id
+        """)
+        
+        ref_result = db.execute(ref_query, {"id": id}).fetchone()
+        if not ref_result:
+            raise HTTPException(status_code=404, detail="Question not found")
+        
+        # Find all questions with same course, difficulty, and type (no restrictions)
+        candidates_query = text("""
+            SELECT q.question_id, q.question_text, q.question_type, q.difficulty, q.concepts, 
+                   c.course_code, a.assessment_type, q.version_number, q.is_latest, q.previous_version_id
+            FROM questions q
+            LEFT JOIN courses c ON q.course_id = c.course_id
+            LEFT JOIN assessments a ON q.assessment_id = a.assessment_id
+            WHERE q.course_id = :course_id 
+                AND q.difficulty = :difficulty 
+                AND q.question_type = :qtype
+                AND q.question_id != :id
+        """)
+        
+        candidates = db.execute(candidates_query, {
+            "course_id": ref_result.course_id,
+            "difficulty": ref_result.difficulty,
+            "qtype": ref_result.question_type,
+            "id": id
+        }).fetchall()
+        
+        if not candidates:
+            return {
+                "success": True,
+                "question_id": id,
+                "message": "No similar questions found",
+                "suggested_variants": []
+            }
+        
+        all_concepts = [ref_result.concepts or ""] + [c.concepts or "" for c in candidates]
+        vectorizer = TfidfVectorizer(stop_words="english", ngram_range=(1, 2))
+        tfidf_matrix = vectorizer.fit_transform(all_concepts)
+        similarities = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:]).flatten()
+        
+        suggestions = []
+        for idx, candidate in enumerate(candidates):
+            suggestions.append({
+                "question_id": int(candidate.question_id),
+                "question_text": candidate.question_text[:100] + "..." if len(candidate.question_text) > 100 else candidate.question_text,
+                "course_code": candidate.course_code,
+                "assessment_type": candidate.assessment_type,
+                "difficulty": candidate.difficulty,
+                "question_type": candidate.question_type,
+                "concepts": candidate.concepts.split(',') if candidate.concepts else [],
+                "version_number": candidate.version_number,
+                "is_latest": candidate.is_latest,
+                "previous_version_id": candidate.previous_version_id,
+                "similarity_score": round(float(similarities[idx]), 3)
+            })
+        
+        suggestions.sort(key=lambda x: x["similarity_score"], reverse=True)
+        return {
+            "success": True,
+            "question_id": id,
+            "reference_question": {
+                "course_code": ref_result.course_code,
+                "difficulty": ref_result.difficulty,
+                "question_type": ref_result.question_type,
+                "concepts": ref_result.concepts.split(',') if ref_result.concepts else []
+            },
+            "matching_criteria": {
+                "same_course": True,
+                "same_difficulty": True,
+                "same_question_type": True,
+                "concept_similarity": "TF-IDF cosine similarity",
+                "note": "Includes all versions and related questions (no parent/child restrictions)"
+            },
+            "suggested_variants": suggestions[:top_n],
+            "total_candidates": len(candidates)
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
