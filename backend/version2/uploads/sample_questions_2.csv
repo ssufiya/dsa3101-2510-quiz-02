@@ -1,0 +1,4 @@
+question,option_a,option_b,option_c,option_d,correct_answer,difficulty,course_name,course_code,type,tags
+"What is the capital of France?","Paris","London","Berlin","Madrid",0,Easy,"Introduction to Geography","GEOG101","Multiple Choice","geography;europe"
+"Python is a programming language","True","False","","",0,Easy,"Computer Science Fundamentals","CS101","True/False","programming;python"
+"What is 2 + 2?","3","4","5","6",1,Easy,"Basic Mathematics","MATH101","Multiple Choice","arithmetic;basics"

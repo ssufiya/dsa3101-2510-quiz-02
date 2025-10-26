@@ -73,12 +73,13 @@ export function LoginForm({ onLogin }) {
               </Alert>
             )}
 
-            <div className="space-y-2">
+            <div className="space-y-2 flex justify-center">
               <Label htmlFor="email">Email</Label>
               <Input
                 id="email"
                 type="email"
                 placeholder="Enter your email"
+                className="h8 px-3 py-2 text-base w-64"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={isLoading}
@@ -86,13 +87,14 @@ export function LoginForm({ onLogin }) {
               />
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2 flex justify-center">
               <Label htmlFor="password">Password</Label>
-              <div className="relative">
+              <div className="flex justify-center w-56">
                 <Input
                   id="password"
                   type={showPassword ? 'text' : 'password'}
                   placeholder="Enter your password"
+                  className="flex-1 h-8 px-2 text-sm"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={isLoading}
@@ -102,7 +104,7 @@ export function LoginForm({ onLogin }) {
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 h-auto px-2 py-1 hover:bg-transparent"
+                  className= "ml-2 h-8 px-2 py-1 hover:bg-transparent"
                   onClick={() => setShowPassword(!showPassword)}
                   disabled={isLoading}
                 >
@@ -115,21 +117,19 @@ export function LoginForm({ onLogin }) {
               </div>
             </div>
 
-            <div className="flex justify-end">
-              <Button variant="link" className="px-0 h-auto">
-                Forgot password?
-              </Button>
-            </div>
+
           </CardContent>
 
           <CardFooter>
+              <div className="pt-6 w-full">
             <Button 
               type="submit" 
-              className="w-full" 
+              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white" 
               disabled={isLoading}
             >
               {isLoading ? 'Signing in...' : 'Sign In'}
             </Button>
+            </div>
           </CardFooter>
         </form>
       </Card>
