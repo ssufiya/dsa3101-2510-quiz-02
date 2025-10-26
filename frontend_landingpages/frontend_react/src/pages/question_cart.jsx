@@ -1,22 +1,21 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/card";
 import { Button } from "../components/button";
-import { ArrowLeft, Trash2 } from "lucide-react";
+import { ArrowLeft, Trash2, Eye } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
 export function QuestionCart({
   onBack,
   onBackToLibrary,
-  onBackToDetails,
-  selectedQuestionId, 
+  onBackToDetails, // 👈 used for "View Details"
+  selectedQuestionId,
   questions,
   onRemoveQuestion,
 }) {
   const [localQuestions, setLocalQuestions] = useState([]);
 
   useEffect(() => {
-    // Sync cart questions from props
     setLocalQuestions(questions || []);
   }, [questions]);
 
@@ -35,9 +34,7 @@ export function QuestionCart({
     }
   };
 
-  // 📄 Export as PDF
   const handleExportPDF = () => {
-    console.log("Exporting PDF...");
     const doc = new jsPDF({
       orientation: "portrait",
       unit: "mm",
@@ -49,7 +46,6 @@ export function QuestionCart({
       return;
     }
 
-    // 🏫 Header
     const firstQuestion = localQuestions[0];
     const courseCode = firstQuestion.course_code || "N/A";
     const courseName = firstQuestion.course_name || "N/A";
@@ -67,7 +63,6 @@ export function QuestionCart({
     doc.setFontSize(13);
     doc.text("Question Paper", 14, 50);
 
-    // ✏️ Start listing questions
     let yPosition = 65;
     doc.setFont("helvetica", "normal");
     doc.setFontSize(11);
@@ -76,20 +71,17 @@ export function QuestionCart({
       let questionText = `${index + 1}. ${q.question_text || "N/A"}`;
       const questionType = q.question_type?.toLowerCase() || "short";
 
-      // For True/False questions
       if (questionType === "truefalse" || questionType === "true/false") {
         questionText += "  (True / False)";
       }
 
-      // Wrap question text
       const splitText = doc.splitTextToSize(questionText, 180);
       doc.text(splitText, 14, yPosition);
       yPosition += splitText.length * 7;
 
-      // Add MCQ options if available
       if (questionType === "mcq" && q.options?.length > 0) {
         q.options.forEach((option, i) => {
-          const optionLabel = String.fromCharCode(65 + i); // A, B, C, D...
+          const optionLabel = String.fromCharCode(65 + i);
           const optionText = `${optionLabel}. ${option}`;
           const splitOption = doc.splitTextToSize(optionText, 170);
           doc.text(splitOption, 20, yPosition);
@@ -97,25 +89,20 @@ export function QuestionCart({
         });
       }
 
-      // Add some spacing before next question
       yPosition += 6;
-
-      // Add a new page if reaching the bottom
       if (yPosition > 270) {
         doc.addPage();
         yPosition = 20;
       }
     });
 
-    // 💾 Save file
     const filename = `${courseCode}_question_paper.pdf`;
     doc.save(filename);
   };
 
-  // 🧭 Smart back button handler
   const handleBackToQuestion = () => {
     if (selectedQuestionId && onBackToDetails) {
-      onBackToDetails();
+      onBackToDetails(selectedQuestionId);
     } else if (onBackToLibrary) {
       onBackToLibrary();
     } else if (onBack) {
@@ -127,31 +114,20 @@ export function QuestionCart({
     <div className="p-6 space-y-4 min-h-screen bg-gray-50">
       {/* Navigation Buttons */}
       <div className="flex space-x-2">
-        {/* Back to Dashboard */}
         <Button variant="ghost" onClick={onBack} className="flex items-center space-x-2">
           <ArrowLeft className="h-4 w-4" />
           <span>Back to Dashboard</span>
         </Button>
 
-        {/* Back to Library */}
         {onBackToLibrary && (
-          <Button
-            variant="ghost"
-            onClick={onBackToLibrary}
-            className="flex items-center space-x-2"
-          >
+          <Button variant="ghost" onClick={onBackToLibrary} className="flex items-center space-x-2">
             <ArrowLeft className="h-4 w-4" />
             <span>Back to Library</span>
           </Button>
         )}
 
-        {/* Back to Question — only shown if a question is selected */}
         {onBackToDetails && selectedQuestionId && (
-          <Button
-            variant="ghost"
-            onClick={handleBackToQuestion}
-            className="flex items-center space-x-2"
-          >
+          <Button variant="ghost" onClick={handleBackToQuestion} className="flex items-center space-x-2">
             <ArrowLeft className="h-4 w-4" />
             <span>Back to Question</span>
           </Button>
@@ -175,23 +151,38 @@ export function QuestionCart({
                     </p>
                   )}
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => onRemoveQuestion(q.question_id)}
-                  className="flex items-center space-x-1"
-                >
-                  <Trash2 className="h-4 w-4" />
-                  <span>Remove</span>
-                </Button>
+
+                <div className="flex space-x-2">
+                  {/* 👁️ View Details Button */}
+                  {onBackToDetails && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => onBackToDetails(q.question_id)} // 👈 calls detail page function
+                      className="flex items-center space-x-1"
+                    >
+                      <Eye className="h-4 w-4" />
+                      <span>View Details</span>
+                    </Button>
+                  )}
+
+                  {/* 🗑️ Remove Button */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onRemoveQuestion(q.question_id)}
+                    className="flex items-center space-x-1"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    <span>Remove</span>
+                  </Button>
+                </div>
               </CardHeader>
 
               <CardContent>
                 <p className="font-medium mb-2">{q.question_text}</p>
                 {q.answer && (
-                  <p className="text-sm text-muted-foreground mb-1">
-                    Answer: {q.answer}
-                  </p>
+                  <p className="text-sm text-muted-foreground mb-1">Answer: {q.answer}</p>
                 )}
                 {q.concepts && q.concepts.length > 0 && (
                   <p className="text-sm text-gray-700 mb-1">

@@ -1,12 +1,12 @@
-import { useState } from 'react';
-import './App.css';
-import { LoginForm } from './pages/loginpage.jsx';
-import { Homepage } from './pages/homepage_dashboard.jsx';
-import { UploadCSV } from './pages/uploadcsv.jsx';
-import { QuestionLibrary } from './pages/question_library.jsx';
-import { QuestionDetails } from './pages/question_details.jsx';
-import { QuestionCart } from './pages/question_cart.jsx';
-import EditQuestion from './pages/edit_question.jsx';
+import { useState } from "react";
+import "./App.css";
+import { LoginForm } from "./pages/loginpage.jsx";
+import { Homepage } from "./pages/homepage_dashboard.jsx";
+import { UploadCSV } from "./pages/uploadcsv.jsx";
+import { QuestionLibrary } from "./pages/question_library.jsx";
+import { QuestionDetails } from "./pages/question_details.jsx";
+import { QuestionCart } from "./pages/question_cart.jsx";
+import EditQuestion from "./pages/edit_question.jsx";
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState("login"); // "login", "dashboard", "upload", etc.
@@ -124,8 +124,8 @@ export default function App() {
       <QuestionCart
         onBack={goToDashboard}
         onBackToLibrary={goToQuestionLibrary}
-        onBackToDetails={() => goToQuestionDetails(selectedQuestionId)}
-        selectedQuestionId={selectedQuestionId}  
+        onBackToDetails={goToQuestionDetails}  // ✅ FIXED: now passes the ID correctly
+        selectedQuestionId={selectedQuestionId}
         questions={cartQuestions}
         onRemoveQuestion={removeFromCart}
       />
