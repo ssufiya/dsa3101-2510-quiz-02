@@ -20,11 +20,7 @@ function MultiSelectDropdown({ label, options, selected, setSelected }) {
 
   return (
     <div className="relative w-48">
-      <Button
-        variant="outline"
-        className="w-full justify-between"
-        onClick={() => setOpen(!open)}
-      >
+      <Button variant="outline" className="w-full justify-between" onClick={() => setOpen(!open)}>
         {selected.length ? selected.join(", ") : label}
         <ChevronDown className="ml-2 h-4 w-4" />
       </Button>
@@ -58,23 +54,16 @@ function SingleSelectDropdown({ label, options, selected, setSelected }) {
 
   return (
     <div className="relative w-48">
-      <Button
-        variant="outline"
-        className="w-full justify-between"
-        onClick={() => setOpen(!open)}
-      >
+      <Button variant="outline" className="w-full justify-between" onClick={() => setOpen(!open)}>
         {selected || label}
         <ChevronDown className="ml-2 h-4 w-4" />
       </Button>
-
       {open && (
         <div className="absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded shadow-lg max-h-60 overflow-y-auto">
           {options.map((option) => (
             <div
               key={option}
-              className={`px-3 py-2 cursor-pointer hover:bg-gray-100 ${
-                selected === option ? "bg-gray-100 font-medium" : ""
-              }`}
+              className={`px-3 py-2 cursor-pointer hover:bg-gray-100 ${selected === option ? "bg-gray-100 font-medium" : ""}`}
               onClick={() => handleSelect(option)}
             >
               {option}
@@ -91,13 +80,19 @@ function QuestionCard({ question, onQuestionDetails, onAddToCart, isInCart }) {
   const getTypeColor = (type) => {
     switch (type) {
       case "MCQ":
-      case "Multiple Choice": return "bg-blue-100 text-blue-800";
+      case "Multiple Choice":
+        return "bg-blue-100 text-blue-800";
       case "T/F":
-      case "True/False": return "bg-purple-100 text-purple-800";
-      case "Short Answer": return "bg-orange-100 text-orange-800";
-      case "Essay": return "bg-pink-100 text-pink-800";
-      case "Code": return "bg-green-100 text-green-800";
-      default: return "bg-gray-100 text-gray-800";
+      case "True/False":
+        return "bg-purple-100 text-purple-800";
+      case "Short Answer":
+        return "bg-orange-100 text-orange-800";
+      case "Essay":
+        return "bg-pink-100 text-pink-800";
+      case "Code":
+        return "bg-green-100 text-green-800";
+      default:
+        return "bg-gray-100 text-gray-800";
     }
   };
 
@@ -123,8 +118,7 @@ function QuestionCard({ question, onQuestionDetails, onAddToCart, isInCart }) {
       <CardContent>
         <div className="space-y-4">
           <div className="text-sm text-muted-foreground line-clamp-3">{question.question_text}</div>
-          
-          {/* Concepts with commas */}
+
           {Array.isArray(question.concepts) && question.concepts.length > 0 && (
             <div className="flex flex-wrap gap-1 items-center">
               {question.concepts.slice(0, 3).map((tag, idx, arr) => (
@@ -164,11 +158,13 @@ function QuestionCard({ question, onQuestionDetails, onAddToCart, isInCart }) {
 // --- QuestionLibrary ---
 export function QuestionLibrary({ onBack, onQuestionDetails, onAddToCart, cartQuestions = [], onGoToQuestionCart }) {
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedDifficulties, setSelectedDifficulties] = useState([]);
-  const [selectedTypes, setSelectedTypes] = useState([]);
-  const [selectedCourses, setSelectedCourses] = useState([]);
-  const [selectedSemesters, setSelectedSemesters] = useState([]);
-  const [matchMode, setMatchMode] = useState("");
+  const [filters, setFilters] = useState({
+    difficulties: [],
+    types: [],
+    courses: [],
+    semesters: [],
+    matchMode: "",
+  });
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -178,24 +174,25 @@ export function QuestionLibrary({ onBack, onQuestionDetails, onAddToCart, cartQu
   const semesters = ["AY23/24 Sem 1", "AY23/24 Sem 2"];
   const matches = ["Match All", "Match Any"];
 
-  const fetchQuestions = async () => {
+  const fetchQuestions = async (overrideFilters = {}) => {
+    setLoading(true);
     try {
-      setLoading(true);
       const response = await axios.get("http://localhost:5003/api/questions/", {
         params: {
-          difficulty: selectedDifficulties.length ? selectedDifficulties.join(",") : undefined,
-          type: selectedTypes.length ? selectedTypes.join(",") : undefined,
-          subject: selectedCourses.length ? selectedCourses.join(",") : undefined,
-          semester: selectedSemesters.length ? selectedSemesters.join(",") : undefined,
+          difficulty: filters.difficulties.length ? filters.difficulties.join(",") : undefined,
+          type: filters.types.length ? filters.types.join(",") : undefined,
+          subject: filters.courses.length ? filters.courses.join(",") : undefined,
+          semester: filters.semesters.length ? filters.semesters.join(",") : undefined,
           topic: searchTerm || undefined,
-          match: matchMode || undefined,
+          match: filters.matchMode || undefined,
           fuzzy: true,
           is_latest: true,
+          ...overrideFilters, // override any filters if needed
         },
       });
       setQuestions(response.data.data || []);
-    } catch (error) {
-      console.error("Error fetching questions:", error);
+    } catch {
+      setQuestions([]);
     } finally {
       setLoading(false);
     }
@@ -206,6 +203,25 @@ export function QuestionLibrary({ onBack, onQuestionDetails, onAddToCart, cartQu
   }, []);
 
   const isInCart = (id) => cartQuestions.some((q) => q.question_id === id);
+
+  const clearFilters = () => {
+    setSearchTerm("");
+    setFilters({
+      difficulties: [],
+      types: [],
+      courses: [],
+      semesters: [],
+      matchMode: "",
+    });
+    fetchQuestions({
+      difficulty: undefined,
+      type: undefined,
+      subject: undefined,
+      semester: undefined,
+      topic: undefined,
+      match: undefined,
+    });
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
@@ -247,14 +263,39 @@ export function QuestionLibrary({ onBack, onQuestionDetails, onAddToCart, cartQu
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-64"
           />
+          <MultiSelectDropdown
+            label="Select Difficulty"
+            options={difficulties}
+            selected={filters.difficulties}
+            setSelected={(vals) => setFilters({ ...filters, difficulties: vals })}
+          />
+          <MultiSelectDropdown
+            label="Select Type"
+            options={types}
+            selected={filters.types}
+            setSelected={(vals) => setFilters({ ...filters, types: vals })}
+          />
+          <MultiSelectDropdown
+            label="Select Course"
+            options={courses}
+            selected={filters.courses}
+            setSelected={(vals) => setFilters({ ...filters, courses: vals })}
+          />
+          <MultiSelectDropdown
+            label="Select Semester"
+            options={semesters}
+            selected={filters.semesters}
+            setSelected={(vals) => setFilters({ ...filters, semesters: vals })}
+          />
+          <SingleSelectDropdown
+            label="Select Match Mode"
+            options={matches}
+            selected={filters.matchMode}
+            setSelected={(val) => setFilters({ ...filters, matchMode: val })}
+          />
 
-          <MultiSelectDropdown label="Select Difficulty" options={difficulties} selected={selectedDifficulties} setSelected={setSelectedDifficulties} />
-          <MultiSelectDropdown label="Select Type" options={types} selected={selectedTypes} setSelected={setSelectedTypes} />
-          <MultiSelectDropdown label="Select Course" options={courses} selected={selectedCourses} setSelected={setSelectedCourses} />
-          <MultiSelectDropdown label="Select Semester" options={semesters} selected={selectedSemesters} setSelected={setSelectedSemesters} />
-          <SingleSelectDropdown label="Select Match Mode" options={matches} selected={matchMode} setSelected={setMatchMode} />
-
-          <Button onClick={fetchQuestions} className="ml-2">Filter</Button>
+          <Button onClick={() => fetchQuestions()} className="ml-2">Filter</Button>
+          <Button variant="outline" onClick={clearFilters} className="ml-2">Clear</Button>
         </div>
 
         {/* Question List */}
@@ -266,24 +307,25 @@ export function QuestionLibrary({ onBack, onQuestionDetails, onAddToCart, cartQu
               </h2>
             </div>
           )}
-          {loading ? <p>Loading questions...</p> :
-            questions.length === 0 ? (
-              <div className="text-center text-gray-500 mt-10">
-                <p>No questions found.</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {questions.map((q) => (
-                  <QuestionCard
-                    key={q.question_id}
-                    question={q}
-                    onQuestionDetails={onQuestionDetails}
-                    onAddToCart={onAddToCart}
-                    isInCart={isInCart}
-                  />
-                ))}
-              </div>
-            )}
+          {loading ? (
+            <p>Loading questions...</p>
+          ) : questions.length === 0 ? (
+            <div className="text-center text-gray-500 mt-10">
+              <p>No questions found.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {questions.map((q) => (
+                <QuestionCard
+                  key={q.question_id}
+                  question={q}
+                  onQuestionDetails={onQuestionDetails}
+                  onAddToCart={onAddToCart}
+                  isInCart={isInCart}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
