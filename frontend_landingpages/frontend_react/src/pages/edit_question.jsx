@@ -69,7 +69,7 @@ export default function EditQuestion({ questionId, questionData, onBack, onSave 
   const handleSave = async () => {
     if (!questionText || !courseName || !courseCode) {
       setModalType("error");
-      setModalMessage("⚠️ Please fill in all required fields (Course Name, Course Code, Question Text).");
+      setModalMessage(" Please fill in all required fields (Course Name, Course Code, Question Text).");
       setModalOpen(true);
       return;
     }
@@ -113,8 +113,6 @@ export default function EditQuestion({ questionId, questionData, onBack, onSave 
         { headers: { "Content-Type": "multipart/form-data" } }
       );
 
-      console.log("✅ Upload response:", res.data);
-
       const newId = res.data.new_question_id;
       const newVersion = res.data.new_version_number;
       const parentId = res.data.previous_version_id || questionId;
@@ -123,7 +121,7 @@ export default function EditQuestion({ questionId, questionData, onBack, onSave 
 
       // Success modal
       setModalType("success");
-      setModalMessage(`✅ Successfully uploaded!\nNew version: ${newVersion}`);
+      setModalMessage(`Version ${newVersion} of question updated successfully!`);
       setModalOpen(true);
 
       // Auto-close and return
@@ -132,7 +130,6 @@ export default function EditQuestion({ questionId, questionData, onBack, onSave 
         onSave(newQuestionRes.data, parentId);
       }, 2500);
     } catch (err) {
-      console.error("❌ Error updating question:", err);
 
       const data = err.response?.data;
       let detail = "Error updating question.";
@@ -145,79 +142,81 @@ export default function EditQuestion({ questionId, questionData, onBack, onSave 
         detail = data.detail.errors.join("\n• ");
 
       setModalType("error");
-      setModalMessage(`❌ Upload failed:\n${detail}`);
+      setModalMessage(`${detail}`);
       setModalOpen(true);
     }
   };
 
   return (
     <>
-      <Card className="p-4">
+      <Card style={{ padding: "16px" }}>
         <CardHeader>
           <CardTitle>Edit Question</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <label>Course Name</label>
-          <Input value={courseName} onChange={(e) => setCourseName(e.target.value)} />
+        <CardContent>
+          <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+            <label>Course Name</label>
+            <Input value={courseName} onChange={(e) => setCourseName(e.target.value)} />
 
-          <label>Course Code</label>
-          <Input value={courseCode} onChange={(e) => setCourseCode(e.target.value)} />
+            <label>Course Code</label>
+            <Input value={courseCode} onChange={(e) => setCourseCode(e.target.value)} />
 
-          <label>Difficulty</label>
-          <select
-            value={difficulty}
-            onChange={(e) => setDifficulty(e.target.value)}
-            className="border rounded p-2 w-full"
-          >
-            {difficultyOptions.map((opt) => (
-              <option key={opt} value={opt}>{opt}</option>
+            <label>Difficulty</label>
+            <select
+              value={difficulty}
+              onChange={(e) => setDifficulty(e.target.value)}
+              style={{ borderRadius: "6px", padding: "8px", border: "1px solid #ccc" }}
+            >
+              {difficultyOptions.map((opt) => (
+                <option key={opt} value={opt}>{opt}</option>
+              ))}
+            </select>
+
+            <label>Question Type</label>
+            <select
+              value={questionType}
+              onChange={(e) => setQuestionType(e.target.value)}
+              style={{ borderRadius: "6px", padding: "8px", border: "1px solid #ccc" }}
+            >
+              {questionTypeOptions.map((opt) => (
+                <option key={opt} value={opt}>{opt}</option>
+              ))}
+            </select>
+
+            <label>Assessment Type</label>
+            <Input value={assessmentType} onChange={(e) => setAssessmentType(e.target.value)} />
+
+            <label>Question Text</label>
+            <Textarea value={questionText} onChange={(e) => setQuestionText(e.target.value)} />
+
+            <label>Explanation</label>
+            <Textarea value={explanation} onChange={(e) => setExplanation(e.target.value)} />
+
+            <label>Points</label>
+            <Input
+              type="number"
+              value={points}
+              onChange={(e) => setPoints(Number(e.target.value))}
+            />
+
+            <label>Options</label>
+            {options.map((opt, idx) => (
+              <div key={idx} style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                <span>{opt.key}.</span>
+                <Input
+                  value={opt.value}
+                  onChange={(e) => handleOptionChange(idx, e.target.value)}
+                />
+              </div>
             ))}
-          </select>
 
-          <label>Question Type</label>
-          <select
-            value={questionType}
-            onChange={(e) => setQuestionType(e.target.value)}
-            className="border rounded p-2 w-full"
-          >
-            {questionTypeOptions.map((opt) => (
-              <option key={opt} value={opt}>{opt}</option>
-            ))}
-          </select>
+            <label>Tags (comma separated)</label>
+            <Input value={tags} onChange={(e) => setTags(e.target.value)} />
 
-          <label>Assessment Type</label>
-          <Input value={assessmentType} onChange={(e) => setAssessmentType(e.target.value)} />
-
-          <label>Question Text</label>
-          <Textarea value={questionText} onChange={(e) => setQuestionText(e.target.value)} />
-
-          <label>Explanation</label>
-          <Textarea value={explanation} onChange={(e) => setExplanation(e.target.value)} />
-
-          <label>Points</label>
-          <Input
-            type="number"
-            value={points}
-            onChange={(e) => setPoints(Number(e.target.value))}
-          />
-
-          <label>Options</label>
-          {options.map((opt, idx) => (
-            <div key={idx} className="flex space-x-2 items-center">
-              <span>{opt.key}.</span>
-              <Input
-                value={opt.value}
-                onChange={(e) => handleOptionChange(idx, e.target.value)}
-              />
+            <div style={{ display: "flex", gap: "10px", marginTop: "16px" }}>
+              <Button onClick={handleSave}>Save / Upload New Version</Button>
+              <Button variant="secondary" onClick={onBack}>Cancel</Button>
             </div>
-          ))}
-
-          <label>Tags (comma separated)</label>
-          <Input value={tags} onChange={(e) => setTags(e.target.value)} />
-
-          <div className="flex space-x-2 mt-4">
-            <Button onClick={handleSave}>Save / Upload New Version</Button>
-            <Button variant="secondary" onClick={onBack}>Cancel</Button>
           </div>
         </CardContent>
       </Card>
@@ -225,26 +224,55 @@ export default function EditQuestion({ questionId, questionData, onBack, onSave 
       {/* --- Popup modal --- */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent
-          className={`sm:max-w-md animate-fadeScale !text-white !border-none shadow-lg rounded-xl p-6 ${
-            modalType === "success" ? "!bg-green-600" : "!bg-red-600"
-          }`}
+          style={{
+            backgroundColor: "transparent",
+            border: "none",
+            boxShadow: "none",
+            padding: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
         >
-          <DialogHeader>
-            <DialogTitle className="text-white font-semibold">
-              {modalType === "success" ? "Upload Successful" : "Upload Failed"}
-            </DialogTitle>
-            <DialogDescription className="text-white whitespace-pre-line">
-              {modalMessage}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex justify-end pt-4">
-            <Button
-              variant="secondary"
-              className="bg-white text-gray-800 hover:bg-gray-100"
-              onClick={() => setModalOpen(false)}
-            >
-              Close
-            </Button>
+          <div
+            style={{
+              width: "500px", height: "300px",
+              backgroundColor: modalType === "success" ? "#16a34a" : "#dc2626", // solid bg
+              color: "white",
+              border: `4px solid ${modalType === "success" ? "#166534" : "#991b1b"}`,
+              borderRadius: "16px",
+              padding: "24px",
+              boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "space-between",
+            }}
+          >
+            <DialogHeader>
+              <DialogTitle style={{ color: "white", fontWeight: "600" }}>
+                {modalType === "success" ? "Upload Successful" : "Upload Failed"}
+              </DialogTitle>
+              <DialogDescription style={{ color: "white", whiteSpace: "pre-line" }}>
+                {modalMessage}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", paddingTop: "16px" }}>
+              <Button
+                variant="secondary"
+                style={{
+                  backgroundColor: "white",
+                  color: "#333",
+                  border: "1px solid #ccc",
+                  borderRadius: "8px",
+                  padding: "8px 16px",
+                  cursor: "pointer",
+                }}
+                onClick={() => setModalOpen(false)}
+              >
+                Close
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
