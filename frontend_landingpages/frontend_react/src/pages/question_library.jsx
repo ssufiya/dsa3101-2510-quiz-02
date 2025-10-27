@@ -114,19 +114,28 @@ function QuestionCard({ question, onQuestionDetails, onAddToCart, isInCart }) {
             </Badge>
           </div>
         </div>
+        <CardTitle className="text-lg leading-relaxed">{question.assessment_type || "—"}</CardTitle>
+        <CardDescription>
+          <span className="block font-medium text-foreground">{question.course_code}</span>
+          <span className="block text-sm text-muted-foreground">Difficulty: {question.difficulty}</span>
+        </CardDescription>
+      </CardHeader>
 
-        {/* --- Question Text (bold + centered) --- */}
-        <div 
-          style={{ 
-            textAlign: "center",
-            fontWeight: "bold",
-            fontSize: "18px",
-            color: "#000",
-            marginBottom: "28px",
-          }}
-        >
-          {question.question_text || "No question text available"}
-        </div>
+      <CardContent>
+        <div className="space-y-4">
+          <div className="text-sm text-muted-foreground line-clamp-3">
+            {question.question_text}
+          </div>
+
+          {/* Concepts Section */}
+          {Array.isArray(question.concepts) && question.concepts.length > 0 && (
+            <div className="text-sm text-gray-800 mb-2">
+              <span className="font-bold text-gray-900 tracking-wide">Concepts:</span>{" "}
+              <span className="text-gray-700">
+                {question.concepts.map((c) => c.trim()).join(", ")}
+              </span>
+            </div>
+          )}
 
         {/* --- Course code + difficulty --- */}
         <div className="text-center text-sm text-muted-foreground mb-3">
@@ -199,7 +208,13 @@ function QuestionCard({ question, onQuestionDetails, onAddToCart, isInCart }) {
 }
 
 // --- QuestionLibrary ---
-export function QuestionLibrary({ onBack, onQuestionDetails, onAddToCart, cartQuestions = [], onGoToQuestionCart }) {
+export function QuestionLibrary({
+  onBack,
+  onQuestionDetails,
+  onAddToCart,
+  cartQuestions = [],
+  onGoToQuestionCart,
+}) {
   const [searchTerm, setSearchTerm] = useState("");
   const [filters, setFilters] = useState({
     difficulties: [],
@@ -288,12 +303,18 @@ export function QuestionLibrary({ onBack, onQuestionDetails, onAddToCart, cartQu
                   </div>
                   <div>
                     <h1 className="text-xl font-semibold">Question Library</h1>
-                    <p className="text-sm text-muted-foreground">Browse questions from the database</p>
+                    <p className="text-sm text-muted-foreground">
+                      Browse questions from the database
+                    </p>
                   </div>
                 </div>
               </div>
 
-              <Button variant="ghost" onClick={onGoToQuestionCart} className="flex items-center space-x-2">
+              <Button
+                variant="ghost"
+                onClick={onGoToQuestionCart}
+                className="flex items-center space-x-2"
+              >
                 <ShoppingBasket className="h-5 w-5" />
                 <span>Cart ({cartQuestions.length})</span>
               </Button>
@@ -343,11 +364,10 @@ export function QuestionLibrary({ onBack, onQuestionDetails, onAddToCart, cartQu
 
         {/* Buttons */}
         <div className="bg-white border-b border-gray-200 px-6 py-2 flex justify-end gap-2">
-          <Button 
-            onClick={() => fetchQuestions()}
-            style = {{backgroundColor: "#ec4899"}}
-            >Filter</Button>
-          <Button variant="outline" onClick={clearFilters}>Clear</Button>
+          <Button onClick={() => fetchQuestions()}>Filter</Button>
+          <Button variant="outline" onClick={clearFilters}>
+            Clear
+          </Button>
         </div>
 
         {/* Question List */}
@@ -355,7 +375,8 @@ export function QuestionLibrary({ onBack, onQuestionDetails, onAddToCart, cartQu
           {!loading && questions.length > 0 && (
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-lg font-semibold">
-                Showing {questions.length} question{questions.length !== 1 ? "s" : ""}...
+                Showing {questions.length} question
+                {questions.length !== 1 ? "s" : ""}...
               </h2>
             </div>
           )}

@@ -1,19 +1,22 @@
-import { useState } from 'react';
-import './App.css';
-import { LoginForm } from './pages/loginpage.jsx';
-import { Homepage } from './pages/homepage_dashboard.jsx';
-import { UploadCSV } from './pages/uploadcsv.jsx';
-import { QuestionLibrary } from './pages/question_library.jsx';
-import { QuestionDetails } from './pages/question_details.jsx';
-import { QuestionCart } from './pages/question_cart.jsx';
-import EditQuestion from './pages/edit_question.jsx';
+import { useState } from "react";
+import "./App.css";
+import { LoginForm } from "./pages/loginpage.jsx";
+import { Homepage } from "./pages/homepage_dashboard.jsx";
+import { UploadCSV } from "./pages/uploadcsv.jsx";
+import { QuestionLibrary } from "./pages/question_library.jsx";
+import { QuestionDetails } from "./pages/question_details.jsx";
+import { QuestionCart } from "./pages/question_cart.jsx";
+import EditQuestion from "./pages/edit_question.jsx";
 
 export default function App() {
-  const [currentScreen, setCurrentScreen] = useState("login"); // "login", "dashboard", "upload", etc.
+  const [currentScreen, setCurrentScreen] = useState("login");
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [selectedQuestionId, setSelectedQuestionId] = useState(null);
   const [cartQuestions, setCartQuestions] = useState([]);
-  const [questionLibraryData, setQuestionLibraryData] = useState([]); // store question data globally
+  const [questionLibraryData, setQuestionLibraryData] = useState([]);
+
+  // 👇 track where the cart was opened from
+  const [fromDetailsPage, setFromDetailsPage] = useState(false);
 
   // ---------- Navigation Handlers ----------
   const handleLogin = () => {
@@ -35,7 +38,11 @@ export default function App() {
     setCurrentScreen("questiondetails");
   };
 
-  const goToQuestionCart = () => setCurrentScreen("questioncart");
+  // When navigating to cart, track where user came from
+  const goToQuestionCart = (fromDetails = false) => {
+    setFromDetailsPage(fromDetails);
+    setCurrentScreen("questioncart");
+  };
 
   const goToEditQuestion = (questionId) => {
     setSelectedQuestionId(questionId);
@@ -69,7 +76,7 @@ export default function App() {
         onLogout={handleLogout}
         onGoToUpload={goToUpload}
         onGoToQuestionLibrary={goToQuestionLibrary}
-        onGoToQuestionCart={goToQuestionCart}
+        onGoToQuestionCart={() => goToQuestionCart(false)} // from dashboard
       />
     );
   }
@@ -84,7 +91,7 @@ export default function App() {
         onBack={goToDashboard}
         onQuestionDetails={goToQuestionDetails}
         questionData={questionLibraryData}
-        onGoToQuestionCart={goToQuestionCart}
+        onGoToQuestionCart={() => goToQuestionCart(false)} // from library
         onAddToCart={addToCart}
         cartQuestions={cartQuestions}
       />
@@ -100,7 +107,7 @@ export default function App() {
         onBack={goToQuestionLibrary}
         onEditQuestion={goToEditQuestion}
         onViewQuestion={goToQuestionDetails}
-        onGoToQuestionCart={goToQuestionCart}
+        onGoToQuestionCart={() => goToQuestionCart(true)} // ✅ from details page
         onAddToCart={addToCart}
         cartQuestions={cartQuestions}
       />
@@ -124,10 +131,11 @@ export default function App() {
       <QuestionCart
         onBack={goToDashboard}
         onBackToLibrary={goToQuestionLibrary}
-        onBackToDetails={() => goToQuestionDetails(selectedQuestionId)}
-        selectedQuestionId={selectedQuestionId}  
+        onBackToDetails={goToQuestionDetails}
+        selectedQuestionId={selectedQuestionId}
         questions={cartQuestions}
         onRemoveQuestion={removeFromCart}
+        fromDetailsPage={fromDetailsPage} // ✅ pass flag here
       />
     );
   }
