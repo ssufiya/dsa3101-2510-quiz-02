@@ -16,8 +16,6 @@ import {
   Plus,
   ShoppingBasket,
   Edit,
-  ChevronDown,
-  ChevronUp,
 } from "lucide-react";
 import EditQuestion from "./edit_question.jsx";
 
@@ -33,23 +31,23 @@ export function QuestionDetails({
   const [loading, setLoading] = useState(true);
   const [similarQuestions, setSimilarQuestions] = useState([]);
   const [loadingSimilar, setLoadingSimilar] = useState(true);
-  const [changeHistory, setChangeHistory] = useState([]);
-  const [loadingHistory, setLoadingHistory] = useState(true);
-  const [expandedIndices, setExpandedIndices] = useState([]);
+  const [versions, setVersions] = useState([]);
+  const [loadingVersions, setLoadingVersions] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
 
-  // Fetch question details
+  // --- Fetch question details ---
+  const fetchQuestionData = async (id) => {
+    setLoading(true);
+    const response = await axios.get(`http://localhost:5003/api/questions/${id}`);
+    setQuestionData(response.data.data);
+    setLoading(false);
+  };
+
   useEffect(() => {
-    const fetchQuestionData = async () => {
-      setLoading(true);
-      const response = await axios.get(`http://localhost:5003/api/questions/${questionId}`);
-      setQuestionData(response.data.data);
-      setLoading(false);
-    };
-    if (questionId) fetchQuestionData();
+    if (questionId) fetchQuestionData(questionId);
   }, [questionId]);
 
-  // Fetch similar questions
+  // --- Fetch similar questions ---
   useEffect(() => {
     const fetchSimilarQuestions = async () => {
       setLoadingSimilar(true);
@@ -74,17 +72,27 @@ export function QuestionDetails({
     if (questionId) fetchSimilarQuestions();
   }, [questionId]);
 
-  // Fetch change history
-  useEffect(() => {
-    const fetchChangeHistory = async () => {
-      setLoadingHistory(true);
-      const changeRes = await axios.get(
-        `http://localhost:5003/api/questions/${questionId}/change-history`
+  // --- Fetch all versions (change history) ---
+  const fetchVersions = async (id) => {
+    setLoadingVersions(true);
+    try {
+      const res = await axios.get(
+        `http://localhost:5003/api/questions/${id}/versions`
       );
-      setChangeHistory(changeRes.data.changes || []);
-      setLoadingHistory(false);
-    };
-    if (questionId) fetchChangeHistory();
+      console.log("✅ Version history response:", res.data);
+      const sorted = (res.data.data || []).sort(
+        (a, b) => b.version_number - a.version_number
+      );
+      setVersions(sorted);
+    } catch (err) {
+      console.error("❌ Error fetching version history:", err);
+    } finally {
+      setLoadingVersions(false);
+    }
+  };
+
+  useEffect(() => {
+    if (questionId) fetchVersions(questionId);
   }, [questionId]);
 
   const getDifficultyColor = (difficulty) => {
@@ -95,17 +103,12 @@ export function QuestionDetails({
       case "med":
       case "medium":
         return "bg-yellow-100 text-yellow-800";
+      case "high":
       case "hard":
         return "bg-red-100 text-red-800";
       default:
         return "bg-gray-100 text-gray-800";
     }
-  };
-
-  const toggleExpand = (idx) => {
-    setExpandedIndices((prev) =>
-      prev.includes(idx) ? prev.filter((i) => i !== idx) : [...prev, idx]
-    );
   };
 
   const isInCart = (id) => cartQuestions.some((q) => q.question_id === id);
@@ -114,17 +117,10 @@ export function QuestionDetails({
     if (!isInCart(question.question_id) && onAddToCart) onAddToCart(question);
   };
 
-  const handleViewDetails = (id) => {
-    if (onViewQuestion) {
-      onViewQuestion(id);
-    } else {
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      setLoading(true);
-      axios
-        .get(`http://localhost:5003/api/questions/${id}`)
-        .then((res) => setQuestionData(res.data.data))
-        .finally(() => setLoading(false));
-    }
+  const handleViewDetails = async (id) => {
+    await fetchQuestionData(id);
+    await fetchVersions(id);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   if (loading)
@@ -147,7 +143,10 @@ export function QuestionDetails({
         questionId={questionId}
         questionData={questionData}
         onBack={() => setIsEditing(false)}
-        onSave={(updated) => setQuestionData(updated)}
+        onSave={(updated, parentId) => {
+          setIsEditing(false);
+          handleViewDetails(parentId);
+        }}
       />
     );
 
@@ -179,13 +178,15 @@ export function QuestionDetails({
                     <p>
                       <strong>Question ID:</strong> {questionData.question_id}
                     </p>
-                    <p>
-                      <strong>Difficulty Level:</strong>{" "}
-                      <Badge className={getDifficultyColor(questionData.difficulty)}>
-                        {questionData.difficulty.charAt(0).toUpperCase() +
-                          questionData.difficulty.slice(1)}
-                      </Badge>
-                    </p>
+                    {questionData.difficulty && (
+                      <p>
+                        <strong>Difficulty Level:</strong>{" "}
+                        <Badge className={getDifficultyColor(questionData.difficulty)}>
+                          {questionData.difficulty.charAt(0).toUpperCase() +
+                            questionData.difficulty.slice(1)}
+                        </Badge>
+                      </p>
+                    )}
                     <p>
                       <strong>Assessment:</strong> {questionData.assessment_type}
                     </p>
@@ -229,11 +230,15 @@ export function QuestionDetails({
                   className="flex items-center space-x-1"
                 >
                   <Plus className="h-4 w-4" />
-                  <span>{isInCart(questionData.question_id) ? "Added" : "Add to Cart"}</span>
+                  <span>
+                    {isInCart(questionData.question_id) ? "Added" : "Add to Cart"}
+                  </span>
                 </Button>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="text-gray-800 text-base font-medium">{questionData.question_text}</div>
+                <div className="text-gray-800 text-base font-medium">
+                  {questionData.question_text}
+                </div>
                 {questionData.options && (
                   <ul className="mt-2 space-y-1">
                     {Object.entries(questionData.options).map(([key, value]) => (
@@ -260,59 +265,63 @@ export function QuestionDetails({
               </CardContent>
             </Card>
 
-            {/* Change History Section */}
+            {/* Version History Section */}
             <section>
               <h2 className="text-lg font-semibold mb-2">Change History</h2>
               <Card>
                 <CardHeader>
                   <CardDescription>
-                    (Timestamps shown in your local timezone)
+                    (All previous and latest versions)
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  {loadingHistory ? (
-                    <p className="text-sm text-gray-500 mt-2">Loading change history...</p>
-                  ) : changeHistory.length === 0 ? (
-                    <p className="text-sm text-gray-500 mt-2">No change history available.</p>
+                  {loadingVersions ? (
+                    <p className="text-sm text-gray-500 mt-2">
+                      Loading version history...
+                    </p>
+                  ) : versions.length === 0 ? (
+                    <p className="text-sm text-gray-500 mt-2">
+                      No version history available.
+                    </p>
                   ) : (
                     <ul className="space-y-4 mt-2">
-                      {changeHistory.map((c, idx) => {
-                        const expanded = expandedIndices.includes(idx);
-                        return (
-                          <li
-                            key={idx}
-                            className="p-3 border border-gray-200 rounded bg-gray-50 space-y-1"
-                          >
-                            <div
-                              className="flex justify-between items-center cursor-pointer"
-                              onClick={() => toggleExpand(idx)}
-                            >
-                              <div>
-                                <p className="font-semibold">{c.field}</p>
-                                <p className="text-sm text-gray-600">
-                                  by {c.author}
-                                </p>
-                              </div>
-                              {expanded ? (
-                                <ChevronUp className="h-4 w-4 text-gray-500" />
-                              ) : (
-                                <ChevronDown className="h-4 w-4 text-gray-500" />
-                              )}
+                      {versions.map((v) => (
+                        <li
+                          key={v.question_id}
+                          className="p-3 border border-gray-200 rounded bg-gray-50"
+                        >
+                          <div className="flex justify-between items-center">
+                            <div>
+                              <p className="font-semibold">
+                                Version {v.version_number}{" "}
+                                {v.is_latest && (
+                                  <span className="text-green-600">(Latest)</span>
+                                )}
+                              </p>
+                              <p className="text-sm text-gray-600">
+                                Created:{" "}
+                                {new Date(v.created_at).toLocaleString()}
+                              </p>
                             </div>
-
-                            {expanded && (
-                              <div className="text-sm mt-2 border-t pt-2 space-y-1">
-                                <p>
-                                  <strong>Previous:</strong> {c.previous}
-                                </p>
-                                <p>
-                                  <strong>New:</strong> {c.new}
-                                </p>
-                              </div>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleViewDetails(v.question_id)}
+                            >
+                              <Eye className="h-4 w-4 mr-1" /> View
+                            </Button>
+                          </div>
+                          <div className="mt-2 text-sm text-gray-700">
+                            <p className="font-medium">{v.question_text}</p>
+                            {v.difficulty && (
+                              <Badge className={getDifficultyColor(v.difficulty)}>
+                                {v.difficulty.charAt(0).toUpperCase() +
+                                  v.difficulty.slice(1)}
+                              </Badge>
                             )}
-                          </li>
-                        );
-                      })}
+                          </div>
+                        </li>
+                      ))}
                     </ul>
                   )}
                 </CardContent>
@@ -335,20 +344,37 @@ export function QuestionDetails({
                         className="p-4 bg-gray-50 border border-gray-200"
                       >
                         <div className="flex justify-between items-center mb-1">
-                          <span className="font-semibold text-sm">{Math.round(q.similarity * 100)}% match</span>
+                          <span className="font-semibold text-sm">
+                            {Math.round(q.similarity * 100)}% match
+                          </span>
                           <Badge className={getDifficultyColor(q.difficulty)}>
-                            {q.difficulty.charAt(0).toUpperCase() + q.difficulty.slice(1)}
+                            {q.difficulty.charAt(0).toUpperCase() +
+                              q.difficulty.slice(1)}
                           </Badge>
                         </div>
                         <p className="font-medium">{q.question_text}</p>
-                        <p className="text-sm text-muted-foreground mt-1">{q.course_code} - {q.course_name}</p>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {q.course_code} - {q.course_name}
+                        </p>
                         <div className="flex space-x-2 pt-3">
-                          <Button variant="outline" size="sm" className="flex-1" onClick={() => handleViewDetails(q.question_id)}>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1"
+                            onClick={() => handleViewDetails(q.question_id)}
+                          >
                             <Eye className="h-4 w-4 mr-1" /> View Details
                           </Button>
-                          <Button size="sm" className="flex-1" onClick={() => handleAddToCart(q)} disabled={isInCart(q.question_id)}>
+                          <Button
+                            size="sm"
+                            className="flex-1"
+                            onClick={() => handleAddToCart(q)}
+                            disabled={isInCart(q.question_id)}
+                          >
                             <Plus className="h-4 w-4 mr-1" />
-                            {isInCart(q.question_id) ? "Added to Cart" : "Add to Cart"}
+                            {isInCart(q.question_id)
+                              ? "Added to Cart"
+                              : "Add to Cart"}
                           </Button>
                         </div>
                       </Card>

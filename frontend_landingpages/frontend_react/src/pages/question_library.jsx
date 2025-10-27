@@ -168,7 +168,7 @@ export function QuestionLibrary({ onBack, onQuestionDetails, onAddToCart, cartQu
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  const difficulties = ["low", "med", "hard"];
+  const difficulties = ["Low", "Med", "High"];
   const types = ["Code", "T/F", "MCQ", "MRQ", "SRQ"];
   const courses = ["DSA1101", "IND5003", "ST1131", "ST2131", "ST2137"];
   const semesters = ["AY23/24 Sem 1", "AY23/24 Sem 2"];
@@ -186,8 +186,8 @@ export function QuestionLibrary({ onBack, onQuestionDetails, onAddToCart, cartQu
           topic: searchTerm || undefined,
           match: filters.matchMode || undefined,
           fuzzy: true,
-          is_latest: true,
-          ...overrideFilters, // override any filters if needed
+          is_latest: undefined,
+          ...overrideFilters,
         },
       });
       setQuestions(response.data.data || []);
@@ -200,6 +200,9 @@ export function QuestionLibrary({ onBack, onQuestionDetails, onAddToCart, cartQu
 
   useEffect(() => {
     fetchQuestions();
+    const refreshHandler = () => fetchQuestions();
+    window.addEventListener("refresh-questions", refreshHandler);
+    return () => window.removeEventListener("refresh-questions", refreshHandler);
   }, []);
 
   const isInCart = (id) => cartQuestions.some((q) => q.question_id === id);
@@ -257,12 +260,6 @@ export function QuestionLibrary({ onBack, onQuestionDetails, onAddToCart, cartQu
 
         {/* Filters */}
         <div className="bg-white border-b border-gray-200 px-6 py-4 flex flex-wrap gap-4 items-end">
-          <Input
-            placeholder="Search by keyword..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-64"
-          />
           <MultiSelectDropdown
             label="Select Difficulty"
             options={difficulties}
@@ -287,15 +284,24 @@ export function QuestionLibrary({ onBack, onQuestionDetails, onAddToCart, cartQu
             selected={filters.semesters}
             setSelected={(vals) => setFilters({ ...filters, semesters: vals })}
           />
+          <Input
+            placeholder="Search for topic..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-64"
+          />
           <SingleSelectDropdown
             label="Select Match Mode"
             options={matches}
             selected={filters.matchMode}
             setSelected={(val) => setFilters({ ...filters, matchMode: val })}
           />
+        </div>
 
-          <Button onClick={() => fetchQuestions()} className="ml-2">Filter</Button>
-          <Button variant="outline" onClick={clearFilters} className="ml-2">Clear</Button>
+        {/* Buttons */}
+        <div className="bg-white border-b border-gray-200 px-6 py-2 flex justify-end gap-2">
+          <Button onClick={() => fetchQuestions()}>Filter</Button>
+          <Button variant="outline" onClick={clearFilters}>Clear</Button>
         </div>
 
         {/* Question List */}

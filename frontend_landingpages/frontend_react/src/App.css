@@ -1,3 +1,4 @@
+/* ---------- Base App Layout ---------- */
 #root {
   max-width: 1280px;
   margin: 0 auto;
@@ -19,12 +20,8 @@
 }
 
 @keyframes logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -39,4 +36,56 @@
 
 .read-the-docs {
   color: #888;
+}
+
+/* ---------- Dialog / Modal Styling ---------- */
+
+/* Center the dialog above everything */
+[data-radix-popper-content-wrapper],
+[data-state="open"] > [role="dialog"],
+.radix-dialog-overlay {
+  z-index: 9999 !important;
+}
+
+/* Background overlay (dimmed screen behind popup) */
+.radix-dialog-overlay {
+  position: fixed !important;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.25); /* translucent dark overlay */
+  z-index: 9998 !important;
+}
+
+/* Force Dialog box itself to be fully opaque and solid color */
+[data-state="open"] > [role="dialog"] {
+  background-color: inherit !important;
+  opacity: 1 !important;
+}
+
+/* Remove Radix's built-in translucent pseudo-elements */
+[data-state="open"] > [role="dialog"]::before,
+[data-state="open"] > [role="dialog"]::after {
+  content: none !important;
+  background: none !important;
+  opacity: 1 !important;
+}
+
+/* ---------- Popup Animation ---------- */
+@keyframes fadeScale {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.animate-fadeScale {
+  animation: fadeScale 0.25s ease-out;
 }
