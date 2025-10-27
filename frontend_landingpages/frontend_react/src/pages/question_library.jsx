@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../co
 import { Input } from "../components/input";
 import { Button } from "../components/button";
 import { Badge } from "../components/badge";
-import { ArrowLeft, Bookmark, GripVertical, HelpCircle, ChevronDown, Plus, ShoppingBasket } from "lucide-react";
+import { ArrowLeft, StickyNote, GripVertical, HelpCircle, ChevronDown, Plus, ShoppingBasket, Tag } from "lucide-react";
 import axios from "axios";
 
 // --- MultiSelectDropdown ---
@@ -98,78 +98,100 @@ function SingleSelectDropdown({ label, options, selected, setSelected }) {
 
 // --- QuestionCard ---
 function QuestionCard({ question, onQuestionDetails, onAddToCart, isInCart }) {
-  const getTypeColor = (type) => {
-    switch (type) {
-      case "MCQ":
-      case "Multiple Choice":
-        return "bg-blue-100 text-blue-800";
-      case "T/F":
-      case "True/False":
-        return "bg-purple-100 text-purple-800";
-      case "Short Answer":
-        return "bg-orange-100 text-orange-800";
-      case "Essay":
-        return "bg-pink-100 text-pink-800";
-      case "Code":
-        return "bg-green-100 text-green-800";
-      default:
-        return "bg-gray-100 text-gray-800";
-    }
-  };
-
   return (
     <Card className="hover:shadow-lg transition-shadow">
       <CardHeader>
+
+        {/* --- Metadata row (ID + type) --- */}
         <div className="flex justify-between items-start mb-3">
           <div className="flex items-center space-x-1 text-sm text-muted-foreground">
-            <Bookmark className="h-4 w-4" />
+            <StickyNote className="h-4 w-4" />
             <span>{question.question_id || 0}</span>
           </div>
           <div className="flex items-center space-x-2">
             <GripVertical className="h-4 w-4 text-muted-foreground" />
-            <Badge className={getTypeColor(question.question_type)}>{question.question_type}</Badge>
+            <Badge>{question.question_type}
+            </Badge>
           </div>
         </div>
-        <CardTitle className="text-lg leading-relaxed">{question.assessment_type || "—"}</CardTitle>
-        <CardDescription>
-          <span className="block font-medium text-foreground">{question.course_code}</span>
-          <span className="block text-sm text-muted-foreground">Difficulty: {question.difficulty}</span>
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          <div className="text-sm text-muted-foreground line-clamp-3">{question.question_text}</div>
 
-          {Array.isArray(question.concepts) && question.concepts.length > 0 && (
-            <div className="flex flex-wrap gap-1 items-center">
-              {question.concepts.slice(0, 3).map((tag, idx, arr) => (
-                <span key={idx} className="flex items-center gap-1">
-                  <Badge variant="secondary" className="text-xs">{tag.trim()}</Badge>
-                  {idx < arr.length - 1 && <span>,</span>}
-                </span>
-              ))}
-            </div>
-          )}
+        {/* --- Question Text (bold + centered) --- */}
+        <div 
+          style={{ 
+            textAlign: "center",
+            fontWeight: "bold",
+            fontSize: "18px",
+            color: "#000",
+            marginBottom: "28px",
+          }}
+        >
+          {question.question_text || "No question text available"}
+        </div>
 
-          <div className="flex space-x-2 pt-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex-1"
-              onClick={() => onQuestionDetails(question.question_id)}
-            >
-              View Details
-            </Button>
-            <Button
-              size="sm"
-              className="flex-1"
-              onClick={() => onAddToCart(question)}
-              disabled={isInCart(question.question_id)}
-            >
-              <Plus className="h-4 w-4 mr-1" />
-              {isInCart(question.question_id) ? "Added to Cart" : "Add to Cart"}
-            </Button>
+        {/* --- Course code + difficulty --- */}
+        <div className="text-center text-sm text-muted-foreground mb-3">
+          <div>Course Code: {question.course_code || "—"}</div>
+          <div>
+            Difficulty:{" "}
+            {question.difficulty.charAt(0).toUpperCase() + question.difficulty.slice(1).toLowerCase()}
           </div>
+        </div>
+
+
+        {/* --- Concept tags --- */}
+        {Array.isArray(question.concepts) && question.concepts.length > 0 && (
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              flexWrap: "wrap",
+              marginBottom: "16px",
+              fontSize: "16px",
+              color: "#000",
+            }}
+          >
+            <span style={{ fontWeight: "500", marginRight: "8px" }}>Concepts:</span>
+            {question.concepts.slice(0, 3).map((tag, idx) => (
+              <span
+                key={idx}
+                style={{
+                  backgroundColor: "#f0f0f0",
+                  borderRadius: "16px",
+                  padding: "6px 12px",
+                  marginRight: "8px",
+                  fontSize: "14px",
+                  border: "1px solid #ddd",
+                }}
+              >
+                {tag.trim()}
+              </span>
+            ))}
+          </div>
+        )}
+  
+      </CardHeader>
+
+      <CardContent>
+        {/* --- Buttons --- */}
+        <div className="flex space-x-2 pt-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex-1"
+            onClick={() => onQuestionDetails(question.question_id)}
+          >
+            View Details
+          </Button>
+          <Button
+            size="sm"
+            className="flex-1"
+            onClick={() => onAddToCart(question)}
+            disabled={isInCart(question.question_id)}
+          >
+            <Plus className="h-4 w-4 mr-1" />
+            {isInCart(question.question_id) ? "Added to Cart" : "Add to Cart"}
+          </Button>
         </div>
       </CardContent>
     </Card>
@@ -321,7 +343,10 @@ export function QuestionLibrary({ onBack, onQuestionDetails, onAddToCart, cartQu
 
         {/* Buttons */}
         <div className="bg-white border-b border-gray-200 px-6 py-2 flex justify-end gap-2">
-          <Button onClick={() => fetchQuestions()}>Filter</Button>
+          <Button 
+            onClick={() => fetchQuestions()}
+            style = {{backgroundColor: "#ec4899"}}
+            >Filter</Button>
           <Button variant="outline" onClick={clearFilters}>Clear</Button>
         </div>
 
