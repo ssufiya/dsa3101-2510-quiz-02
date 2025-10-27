@@ -136,18 +136,20 @@ function QuestionCard({ question, onQuestionDetails, onAddToCart, isInCart }) {
           <span className="block text-sm text-muted-foreground">Difficulty: {question.difficulty}</span>
         </CardDescription>
       </CardHeader>
+
       <CardContent>
         <div className="space-y-4">
-          <div className="text-sm text-muted-foreground line-clamp-3">{question.question_text}</div>
+          <div className="text-sm text-muted-foreground line-clamp-3">
+            {question.question_text}
+          </div>
 
+          {/* Concepts Section */}
           {Array.isArray(question.concepts) && question.concepts.length > 0 && (
-            <div className="flex flex-wrap gap-1 items-center">
-              {question.concepts.slice(0, 3).map((tag, idx, arr) => (
-                <span key={idx} className="flex items-center gap-1">
-                  <Badge variant="secondary" className="text-xs">{tag.trim()}</Badge>
-                  {idx < arr.length - 1 && <span>,</span>}
-                </span>
-              ))}
+            <div className="text-sm text-gray-800 mb-2">
+              <span className="font-bold text-gray-900 tracking-wide">Concepts:</span>{" "}
+              <span className="text-gray-700">
+                {question.concepts.map((c) => c.trim()).join(", ")}
+              </span>
             </div>
           )}
 
@@ -177,7 +179,13 @@ function QuestionCard({ question, onQuestionDetails, onAddToCart, isInCart }) {
 }
 
 // --- QuestionLibrary ---
-export function QuestionLibrary({ onBack, onQuestionDetails, onAddToCart, cartQuestions = [], onGoToQuestionCart }) {
+export function QuestionLibrary({
+  onBack,
+  onQuestionDetails,
+  onAddToCart,
+  cartQuestions = [],
+  onGoToQuestionCart,
+}) {
   const [searchTerm, setSearchTerm] = useState("");
   const [filters, setFilters] = useState({
     difficulties: [],
@@ -266,12 +274,18 @@ export function QuestionLibrary({ onBack, onQuestionDetails, onAddToCart, cartQu
                   </div>
                   <div>
                     <h1 className="text-xl font-semibold">Question Library</h1>
-                    <p className="text-sm text-muted-foreground">Browse questions from the database</p>
+                    <p className="text-sm text-muted-foreground">
+                      Browse questions from the database
+                    </p>
                   </div>
                 </div>
               </div>
 
-              <Button variant="ghost" onClick={onGoToQuestionCart} className="flex items-center space-x-2">
+              <Button
+                variant="ghost"
+                onClick={onGoToQuestionCart}
+                className="flex items-center space-x-2"
+              >
                 <ShoppingBasket className="h-5 w-5" />
                 <span>Cart ({cartQuestions.length})</span>
               </Button>
@@ -322,7 +336,9 @@ export function QuestionLibrary({ onBack, onQuestionDetails, onAddToCart, cartQu
         {/* Buttons */}
         <div className="bg-white border-b border-gray-200 px-6 py-2 flex justify-end gap-2">
           <Button onClick={() => fetchQuestions()}>Filter</Button>
-          <Button variant="outline" onClick={clearFilters}>Clear</Button>
+          <Button variant="outline" onClick={clearFilters}>
+            Clear
+          </Button>
         </div>
 
         {/* Question List */}
@@ -330,7 +346,8 @@ export function QuestionLibrary({ onBack, onQuestionDetails, onAddToCart, cartQu
           {!loading && questions.length > 0 && (
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-lg font-semibold">
-                Showing {questions.length} question{questions.length !== 1 ? "s" : ""}...
+                Showing {questions.length} question
+                {questions.length !== 1 ? "s" : ""}...
               </h2>
             </div>
           )}

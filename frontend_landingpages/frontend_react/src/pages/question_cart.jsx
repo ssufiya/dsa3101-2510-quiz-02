@@ -8,10 +8,11 @@ import autoTable from "jspdf-autotable";
 export function QuestionCart({
   onBack,
   onBackToLibrary,
-  onBackToDetails, // 👈 used for "View Details"
+  onBackToDetails, // for viewing a specific question
   selectedQuestionId,
   questions,
   onRemoveQuestion,
+  fromDetailsPage, // 👈 new prop — true only if cart opened from Question Details page
 }) {
   const [localQuestions, setLocalQuestions] = useState([]);
 
@@ -100,25 +101,17 @@ export function QuestionCart({
     doc.save(filename);
   };
 
-  const handleBackToQuestion = () => {
-    if (selectedQuestionId && onBackToDetails) {
-      onBackToDetails(selectedQuestionId);
-    } else if (onBackToLibrary) {
-      onBackToLibrary();
-    } else if (onBack) {
-      onBack();
-    }
-  };
-
   return (
     <div className="p-6 space-y-4 min-h-screen bg-gray-50">
       {/* Navigation Buttons */}
       <div className="flex space-x-2">
+        {/* 🏠 Back to Dashboard */}
         <Button variant="ghost" onClick={onBack} className="flex items-center space-x-2">
           <ArrowLeft className="h-4 w-4" />
           <span>Back to Dashboard</span>
         </Button>
 
+        {/* 📚 Back to Library */}
         {onBackToLibrary && (
           <Button variant="ghost" onClick={onBackToLibrary} className="flex items-center space-x-2">
             <ArrowLeft className="h-4 w-4" />
@@ -126,8 +119,13 @@ export function QuestionCart({
           </Button>
         )}
 
-        {onBackToDetails && selectedQuestionId && (
-          <Button variant="ghost" onClick={handleBackToQuestion} className="flex items-center space-x-2">
+        {/* 👈 Back to Question — only if from details page */}
+        {fromDetailsPage && onBackToDetails && selectedQuestionId && (
+          <Button
+            variant="ghost"
+            onClick={() => onBackToDetails(selectedQuestionId)}
+            className="flex items-center space-x-2"
+          >
             <ArrowLeft className="h-4 w-4" />
             <span>Back to Question</span>
           </Button>
@@ -158,7 +156,7 @@ export function QuestionCart({
                     <Button
                       variant="secondary"
                       size="sm"
-                      onClick={() => onBackToDetails(q.question_id)} // 👈 calls detail page function
+                      onClick={() => onBackToDetails(q.question_id)}
                       className="flex items-center space-x-1"
                     >
                       <Eye className="h-4 w-4" />
@@ -202,7 +200,7 @@ export function QuestionCart({
             </Card>
           ))}
 
-          {/* Export Button */}
+          {/* 📄 Export Button */}
           <button
             onClick={handleExportPDF}
             className="mt-2 bg-blue-600 text-white px-3 py-2 rounded"
