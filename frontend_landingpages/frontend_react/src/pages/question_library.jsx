@@ -25,9 +25,20 @@ function MultiSelectDropdown({ label, options, selected, setSelected }) {
         <ChevronDown className="ml-2 h-4 w-4" />
       </Button>
       {open && (
-        <div className="absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded shadow-lg max-h-60 overflow-y-auto">
+        <div
+          className="absolute z-50 mt-1 w-full border border-gray-300 rounded shadow-lg max-h-60 overflow-y-auto"
+          style={{
+            backgroundColor: "white",
+            opacity: 1,
+            backdropFilter: "none",
+            WebkitBackdropFilter: "none",
+          }}
+        >
           {options.map((option) => (
-            <label key={option} className="flex items-center px-2 py-1 cursor-pointer hover:bg-gray-100">
+            <label
+              key={option}
+              className="flex items-center px-2 py-1 cursor-pointer hover:bg-gray-100"
+            >
               <input
                 type="checkbox"
                 checked={selected.includes(option)}
@@ -59,11 +70,21 @@ function SingleSelectDropdown({ label, options, selected, setSelected }) {
         <ChevronDown className="ml-2 h-4 w-4" />
       </Button>
       {open && (
-        <div className="absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded shadow-lg max-h-60 overflow-y-auto">
+        <div
+          className="absolute z-50 mt-1 w-full border border-gray-300 rounded shadow-lg max-h-60 overflow-y-auto"
+          style={{
+            backgroundColor: "white",
+            opacity: 1,
+            backdropFilter: "none",
+            WebkitBackdropFilter: "none",
+          }}
+        >
           {options.map((option) => (
             <div
               key={option}
-              className={`px-3 py-2 cursor-pointer hover:bg-gray-100 ${selected === option ? "bg-gray-100 font-medium" : ""}`}
+              className={`px-3 py-2 cursor-pointer hover:bg-gray-100 ${
+                selected === option ? "bg-gray-100 font-medium" : ""
+              }`}
               onClick={() => handleSelect(option)}
             >
               {option}
