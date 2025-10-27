@@ -42,7 +42,7 @@ async def get_questions(
     topic: Optional[str] = Query(None, description="Filter by one or more topics"),
     match: Optional[str] = Query("all", description="Match mode: 'any' (OR) or 'all' (AND) across all filters"),
     fuzzy: Optional[bool] = Query(True, description="Enable fuzzy matching for topic keywords"),
-    is_latest: Optional[bool] = Query(True, description="Only return latest versions"),
+    is_latest: Optional[bool] = Query(None, description="Only return latest versions"), ## changed from True to None
     db: Session = Depends(get_db)
 ):
     """
@@ -105,8 +105,12 @@ async def get_questions(
             params["semester"] = f"%{semester}%"
 
         # --- Latest Version Filter ---
-        if is_latest:
+
+        if is_latest is True:
             conditions.append("q.is_latest = TRUE")
+        elif is_latest is False:
+            conditions.append("q.is_latest = FALSE")
+
 
         # --- Combine Conditions: AND vs OR ---
         if conditions:
