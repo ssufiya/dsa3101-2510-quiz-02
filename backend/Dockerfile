@@ -24,9 +24,12 @@ COPY . .
 # Create necessary directories with proper permissions
 RUN mkdir -p \
     /app/quizbank-db/storage/png \
+    /app/quizbank-db/storage/other \
     /app/quizbank-db/uploads \
+    /app/uploads \
     /app/backups/quizbank \
     /app/backups/assets \
+    /app/scripts \
     /app/quizbank-db/scripts \
     /app/quizbank-db/db-init/data
 
@@ -39,6 +42,7 @@ RUN touch /app/quizbank-db/storage/png/.gitkeep \
 # Make all scripts in the scripts directory executable
 RUN find /app/quizbank-db/scripts -type f -name "*.sh" -exec chmod +x {} \; || true
 RUN find /app/quizbank-db/scripts -type f -name "*.py" -exec chmod +x {} \; || true
+RUN find /app/scripts -type f -name "*.sh" -exec chmod +x {} \; 2>/dev/null || true
 
 # Set proper permissions for working directories
 RUN chmod -R 755 /app/quizbank-db/storage \

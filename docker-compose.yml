@@ -63,6 +63,10 @@ services:
       - ./backend/quizbank-db/uploads:/app/quizbank-db/uploads
       # Backup directories (shared with host)
       - ./backend/backups:/app/backups
+      - ./backend/backups/quizbank:/app/backups/quizbank
+      - ./backend/backups/assets:/app/backups/assets
+      # Uploads directory
+      - ./backend/uploads:/app/uploads
       # Database init scripts and data
       - ./backend/quizbank-db/db-init:/app/quizbank-db/db-init:ro
       - ./backend/quizbank-db/scripts:/app/quizbank-db/scripts
