@@ -6,7 +6,7 @@ import { Progress } from '../components/progress';
 import { Alert, AlertDescription } from '../components/alert';
 import { 
   Plus, BookOpen, Edit, Trash2, Eye, LogOut, Users, 
-  BarChart3, HelpCircle, Upload, FileText, CheckCircle, 
+  BarChart3, BookOpenText, Upload, FileText, CheckCircle, 
   AlertCircle, Download, ShoppingBasket
 } from 'lucide-react';
 
@@ -19,29 +19,40 @@ export function Homepage({ onLogout, onCreateQuiz, onEditQuiz, onViewQuiz, onGoT
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
+        <div className="w-full px-0">
+          <div className="flex justify-between items-center h-16 px-6">
             <div className="flex items-center space-x-3">
               <div className="bg-primary rounded-lg p-2">
-                <BookOpen className="h-6 w-6 text-primary-foreground" />
               </div>
               <div>
                 <h1 className="text-xl">Quiz Bank</h1>
-                <p className="text-sm text-muted-foreground">Professor Portal</p>
+                <p className="text-sm text-muted-foreground">Effortlessly manage your question library, design assessments, and track every version of your questions.</p>
               </div>
             </div>
+
             <div className="flex items-center space-x-4">
-              <Button variant="outline" onClick={onGoToQuestionLibrary} className="flex items-center space-x-2">
-                <HelpCircle className="h-4 w-4" />
-                <span>Question Library</span>
+              <Button variant="outline" onClick={onGoToQuestionLibrary}>
+                <span className="flex items-center">
+                  <BookOpenText className="h-4 w-4" />
+                  <span style={{ display: "inline-block", width: "6px" }}></span>
+                  <span>Question Library</span>
+                </span>
               </Button>
-              <Button variant="ghost" onClick={onLogout} className="flex items-center space-x-2">
-                <LogOut className="h-4 w-4" />
-                <span>Logout</span>
+
+              <Button variant="ghost" onClick={onLogout}>
+                <span className="flex items-center space-x-2">
+                  <LogOut className="h-4 w-4" />
+                  <span style={{ display: "inline-block", width: "6px" }}></span>
+                  <span>Logout</span>
+                </span>
               </Button>
+
               <Button variant="ghost" onClick={onGoToQuestionCart} className="flex items-center space-x-2">
-                <ShoppingBasket className="h-4 w-4" />
-                <span>Cart</span>
+                <span className="flex items-center space-x-2">
+                  <ShoppingBasket className="h-4 w-4" />
+                  <span style={{ display: "inline-block", width: "6px" }}></span>
+                  <span>Cart</span>
+                </span>
               </Button>
             </div>
           </div>
