@@ -53,8 +53,6 @@ services:
       RESTORE_IF_BACKUP: ${RESTORE_IF_BACKUP:-1}
       SEED_FORCE: ${SEED_FORCE:-0}
     volumes:
-      # Application code
-      - ./backend:/app
       # Prevent __pycache__ from syncing
       - /app/__pycache__
       # Storage for PNG attachments (live working directory)
