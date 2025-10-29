@@ -3,15 +3,12 @@ import axios from "axios";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
-  CardTitle,
 } from "../components/card";
 import { Button } from "../components/button";
 import { Badge } from "../components/badge";
 import {
   ArrowLeft,
-  HelpCircle,
   Eye,
   Plus,
   ShoppingBasket,
@@ -51,41 +48,30 @@ export function QuestionDetails({
   useEffect(() => {
     const fetchSimilarQuestions = async () => {
       setLoadingSimilar(true);
-      const suggestionsRes = await axios.get(
+      const res = await axios.get(
         `http://localhost:5003/api/questions/${questionId}/suggestions?top_n=5`
       );
-      const suggestedVariants = suggestionsRes.data.suggested_variants || [];
-
-      const detailsPromises = suggestedVariants.map((s) =>
-        axios
-          .get(`http://localhost:5003/api/questions/${s.question_id}`)
-          .then((res) => ({
-            ...res.data.data,
-            similarity: s.similarity,
-          }))
+      const suggested = res.data.suggested_variants || [];
+      const details = await Promise.all(
+        suggested.map((s) =>
+          axios
+            .get(`http://localhost:5003/api/questions/${s.question_id}`)
+            .then((r) => ({ ...r.data.data, similarity: s.similarity }))
+        )
       );
-
-      const details = await Promise.all(detailsPromises);
       setSimilarQuestions(details);
       setLoadingSimilar(false);
     };
     if (questionId) fetchSimilarQuestions();
   }, [questionId]);
 
-  // --- Fetch all versions (change history) ---
+  // --- Fetch version history ---
   const fetchVersions = async (id) => {
     setLoadingVersions(true);
     try {
-      const res = await axios.get(
-        `http://localhost:5003/api/questions/${id}/versions`
-      );
-      console.log("✅ Version history response:", res.data);
-      const sorted = (res.data.data || []).sort(
-        (a, b) => b.version_number - a.version_number
-      );
+      const res = await axios.get(`http://localhost:5003/api/questions/${id}/versions`);
+      const sorted = (res.data.data || []).sort((a, b) => b.version_number - a.version_number);
       setVersions(sorted);
-    } catch (err) {
-      console.error("❌ Error fetching version history:", err);
     } finally {
       setLoadingVersions(false);
     }
@@ -152,240 +138,197 @@ export function QuestionDetails({
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center h-16 justify-between">
-            <div className="flex items-center space-x-4">
-              <Button
-                variant="ghost"
-                onClick={onBack}
-                className="flex items-center space-x-2"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                <span>Back to Library</span>
-              </Button>
-              <div className="flex items-center space-x-3">
-                <div className="bg-primary rounded-lg p-2">
-                  <HelpCircle className="h-6 w-6 text-primary-foreground" />
-                </div>
-                <div>
-                  <h1 className="text-xl font-semibold">Question Details</h1>
-                  <p className="text-sm text-muted-foreground">
-                    {questionData.course_code} – {questionData.course_name}
-                  </p>
-                  <div className="flex flex-col mt-1 text-sm text-gray-500 space-y-2">
-                    <p>
-                      <strong>Question ID:</strong> {questionData.question_id}
-                    </p>
-                    {questionData.difficulty && (
-                      <p>
-                        <strong>Difficulty Level:</strong>{" "}
-                        <Badge className={getDifficultyColor(questionData.difficulty)}>
-                          {questionData.difficulty.charAt(0).toUpperCase() +
-                            questionData.difficulty.slice(1)}
-                        </Badge>
-                      </p>
-                    )}
-                    <p>
-                      <strong>Assessment:</strong> {questionData.assessment_type}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
+      {/* HEADER */}
+      <header className="bg-white border-b border-gray-200 shadow-sm relative">
+        <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between relative">
+          {/* LEFT: Back button */}
+          <Button variant="ghost" onClick={onBack} className="flex items-center space-x-2">
+            <ArrowLeft className="h-4 w-4" />
+            <span>Back</span>
+          </Button>
 
-            <Button
-              variant="ghost"
-              onClick={onGoToQuestionCart}
-              className="flex items-center space-x-2"
-            >
-              <ShoppingBasket className="h-5 w-5" />
-              <span>Cart ({cartQuestions.length})</span>
-            </Button>
-          </div>
+          {/* CENTER: Title */}
+          <h1 className="absolute left-1/2 transform -translate-x-1/2 text-xl font-semibold text-gray-800">
+            Question Details
+          </h1>
+
+          {/* RIGHT: Cart button */}
+          <Button variant="ghost" onClick={onGoToQuestionCart} className="flex items-center space-x-2">
+            <ShoppingBasket className="h-5 w-5" />
+            <span>Cart ({cartQuestions.length})</span>
+          </Button>
         </div>
+        <div className="border-t border-gray-100"></div>
       </header>
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex flex-col md:flex-row gap-8">
-          <div className="flex-1 space-y-6">
-            {/* Question Card */}
-            <Card>
-              <CardHeader className="flex justify-end items-center space-x-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setIsEditing(true)}
-                  className="flex items-center space-x-1"
-                >
-                  <Edit className="h-4 w-4" />
-                  <span>Edit</span>
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() => handleAddToCart(questionData)}
-                  disabled={isInCart(questionData.question_id)}
-                  className="flex items-center space-x-1"
-                >
-                  <Plus className="h-4 w-4" />
-                  <span>
-                    {isInCart(questionData.question_id) ? "Added" : "Add to Cart"}
-                  </span>
-                </Button>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="text-gray-800 text-base font-medium">
-                  {questionData.question_text}
-                </div>
-                {questionData.options && (
-                  <ul className="mt-2 space-y-1">
-                    {Object.entries(questionData.options).map(([key, value]) => (
-                      <li key={key} className="flex items-center space-x-2">
-                        <span className="font-semibold">{key}.</span>
-                        <span>{value}</span>
-                        {questionData.correct_answer === key && (
-                          <span className="text-green-600 ml-2">✅</span>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {questionData.explanation && (
-                  <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-900 whitespace-pre-line">
-                    <strong>Explanation:</strong> {questionData.explanation}
-                  </div>
-                )}
-                {questionData.concepts && questionData.concepts.length > 0 && (
-                  <p className="text-sm text-gray-700 mt-3">
-                    <strong>Concepts:</strong> {questionData.concepts.join(", ")}
-                  </p>
-                )}
-              </CardContent>
-            </Card>
+      {/* MAIN CONTENT */}
+      <main className="max-w-3xl mx-auto px-6 py-10 space-y-10">
+        {/* Question Info */}
+        <Card className="shadow-md border border-gray-200">
+          <CardHeader className="flex justify-between items-center border-b pb-3">
+            <div>
+              <h1 className="text-2xl font-semibold mb-1 text-gray-900">
+                {questionData.course_code} – {questionData.course_name}
+              </h1>
+              <p className="text-sm text-gray-500">
+                ID: {questionData.question_id} | {questionData.assessment_type}
+              </p>
+              {questionData.difficulty && (
+                <Badge className={`mt-2 ${getDifficultyColor(questionData.difficulty)}`}>
+                  {questionData.difficulty}
+                </Badge>
+              )}
+            </div>
 
-            {/* Version History Section */}
-            <section>
-              <h2 className="text-lg font-semibold mb-2">Change History</h2>
-              <Card>
-                <CardHeader>
-                  <CardDescription>
-                    (All previous and latest versions)
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {loadingVersions ? (
-                    <p className="text-sm text-gray-500 mt-2">
-                      Loading version history...
-                    </p>
-                  ) : versions.length === 0 ? (
-                    <p className="text-sm text-gray-500 mt-2">
-                      No version history available.
-                    </p>
-                  ) : (
-                    <ul className="space-y-4 mt-2">
-                      {versions.map((v) => (
-                        <li
-                          key={v.question_id}
-                          className="p-3 border border-gray-200 rounded bg-gray-50"
-                        >
-                          <div className="flex justify-between items-center">
-                            <div>
-                              <p className="font-semibold">
-                                Version {v.version_number}{" "}
-                                {v.is_latest && (
-                                  <span className="text-green-600">(Latest)</span>
-                                )}
-                              </p>
-                              <p className="text-sm text-gray-600">
-                                Created:{" "}
-                                {new Date(v.created_at).toLocaleString()}
-                              </p>
-                            </div>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleViewDetails(v.question_id)}
-                            >
-                              <Eye className="h-4 w-4 mr-1" /> View
-                            </Button>
-                          </div>
-                          <div className="mt-2 text-sm text-gray-700">
-                            <p className="font-medium">{v.question_text}</p>
-                            {v.difficulty && (
-                              <Badge className={getDifficultyColor(v.difficulty)}>
-                                {v.difficulty.charAt(0).toUpperCase() +
-                                  v.difficulty.slice(1)}
-                              </Badge>
-                            )}
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </CardContent>
-              </Card>
-            </section>
+            <div className="flex space-x-2">
+              <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
+                <Edit className="h-4 w-4 mr-1" /> Edit
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => handleAddToCart(questionData)}
+                disabled={isInCart(questionData.question_id)}
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                {isInCart(questionData.question_id) ? "Added" : "Add to Cart"}
+              </Button>
+            </div>
+          </CardHeader>
 
-            {/* Similar Questions Section */}
-            <section>
-              <h2 className="text-lg font-semibold mb-2">Similar Questions</h2>
-              <Card>
-                <CardContent className="space-y-4">
-                  {loadingSimilar ? (
-                    <p className="text-gray-500">Loading similar questions...</p>
-                  ) : similarQuestions.length === 0 ? (
-                    <p className="text-gray-500">No similar questions found.</p>
-                  ) : (
-                    similarQuestions.map((q) => (
-                      <Card
-                        key={q.question_id}
-                        className="p-4 bg-gray-50 border border-gray-200"
+          <CardContent className="py-6 space-y-4">
+            <p className="text-gray-800 text-base leading-relaxed">{questionData.question_text}</p>
+
+            {questionData.options && (
+              <ul className="space-y-2 pl-2">
+                {Object.entries(questionData.options).map(([key, value]) => (
+                  <li key={key} className="flex items-start space-x-2">
+                    <span className="font-semibold">{key}.</span>
+                    <span>{value}</span>
+                    {questionData.correct_answer === key && (
+                      <span className="text-green-600 ml-1">✔</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {questionData.explanation && (
+              <div className="bg-yellow-50 border border-yellow-200 p-3 rounded text-sm text-yellow-900">
+                <strong>Explanation:</strong> {questionData.explanation}
+              </div>
+            )}
+
+            {questionData.concepts?.length > 0 && (
+              <p className="text-sm text-gray-600">
+                <strong>Concepts:</strong> {questionData.concepts.join(", ")}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Version History */}
+        <section className="max-w-3xl mx-auto w-full">
+          <h2 className="text-lg font-semibold mb-4 text-gray-800">Change History</h2>
+          {loadingVersions ? (
+            <p className="text-gray-500">Loading...</p>
+          ) : versions.length === 0 ? (
+            <p className="text-gray-500">No version history available.</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {versions.map((v) => (
+                <Card key={v.question_id} className="shadow-sm hover:shadow-md transition-all">
+                  <CardHeader className="pb-1">
+                    <div className="flex justify-between items-center">
+                      <h3 className="text-sm font-semibold">
+                        Version {v.version_number}{" "}
+                        {v.is_latest && <span className="text-green-600 text-xs">(Latest)</span>}
+                      </h3>
+                      <p className="text-xs text-gray-400">
+                        {new Date(v.created_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="text-sm space-y-2">
+                    <p className="italic text-gray-800 line-clamp-2">
+                      {v.question_text || "No text available"}
+                    </p>
+                    <div className="text-gray-600">
+                      <p>
+                        <strong>Course:</strong> {v.course_code || "—"}
+                      </p>
+                      <p>
+                        <strong>Difficulty:</strong>{" "}
+                        <Badge className={getDifficultyColor(v.difficulty)}>
+                          {v.difficulty || "—"}
+                        </Badge>
+                      </p>
+                    </div>
+                    <div className="flex justify-end">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleViewDetails(v.question_id)}
                       >
-                        <div className="flex justify-between items-center mb-1">
-                          <span className="font-semibold text-sm">
-                            {Math.round(q.similarity * 100)}% match
-                          </span>
-                          <Badge className={getDifficultyColor(q.difficulty)}>
-                            {q.difficulty.charAt(0).toUpperCase() +
-                              q.difficulty.slice(1)}
-                          </Badge>
-                        </div>
-                        <p className="font-medium">{q.question_text}</p>
-                        <p className="text-sm text-muted-foreground mt-1">
-                          {q.course_code} - {q.course_name}
-                        </p>
-                        <div className="flex space-x-2 pt-3">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="flex-1"
-                            onClick={() => handleViewDetails(q.question_id)}
-                          >
-                            <Eye className="h-4 w-4 mr-1" /> View Details
-                          </Button>
-                          <Button
-                            size="sm"
-                            className="flex-1"
-                            onClick={() => handleAddToCart(q)}
-                            disabled={isInCart(q.question_id)}
-                          >
-                            <Plus className="h-4 w-4 mr-1" />
-                            {isInCart(q.question_id)
-                              ? "Added to Cart"
-                              : "Add to Cart"}
-                          </Button>
-                        </div>
-                      </Card>
-                    ))
-                  )}
-                </CardContent>
-              </Card>
-            </section>
-          </div>
-        </div>
-      </div>
+                        <Eye className="h-4 w-4 mr-1" /> View
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Similar Questions */}
+        <section className="max-w-3xl mx-auto w-full">
+          <h2 className="text-lg font-semibold mb-4 text-gray-800">Similar Questions</h2>
+          {loadingSimilar ? (
+            <p className="text-gray-500">Loading...</p>
+          ) : similarQuestions.length === 0 ? (
+            <p className="text-gray-500">No similar questions found.</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {similarQuestions.map((q) => (
+                <Card key={q.question_id} className="shadow-sm hover:shadow-md transition">
+                  <CardContent className="p-4 space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium text-gray-700">
+                        {Math.round(q.similarity * 100)}% match
+                      </span>
+                      <Badge className={getDifficultyColor(q.difficulty)}>
+                        {q.difficulty}
+                      </Badge>
+                    </div>
+                    <p className="font-medium text-gray-900 line-clamp-2">{q.question_text}</p>
+                    <p className="text-sm text-gray-500">
+                      {q.course_code} – {q.course_name}
+                    </p>
+                    <div className="flex space-x-2 pt-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleViewDetails(q.question_id)}
+                        className="flex-1"
+                      >
+                        <Eye className="h-4 w-4 mr-1" /> View
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => handleAddToCart(q)}
+                        disabled={isInCart(q.question_id)}
+                        className="flex-1"
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        {isInCart(q.question_id) ? "Added" : "Add"}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </section>
+      </main>
     </div>
   );
 }
