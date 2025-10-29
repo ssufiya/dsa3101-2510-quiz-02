@@ -33,7 +33,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Configuration
-BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 STORAGE_PNG_PATH = BACKEND_ROOT / "quizbank-db" / "storage" / "png"
 STORAGE_OTHER_PATH = BACKEND_ROOT / "quizbank-db" / "storage" / "other"
 BACKUP_DIR = BACKEND_ROOT / "backups" / "quizbank"
@@ -344,7 +344,8 @@ def parse_meta_from_filename(pathlike) -> Optional[Tuple[str, str, str, Optional
     norm_kind = "contexts" if "context" in kind else "questions"
     return (course, title, norm_kind, ay, sem)
 
-def check_for_duplicates(session, course_id: int, assessment_id: int, questions_data: list) -> tuple[bool, list]:
+
+def check_for_duplicates(session, assessment_id: int, questions_data: list) -> tuple[bool, list]:
     """
     Check if any questions already exist in the database.
     
@@ -363,14 +364,13 @@ def check_for_duplicates(session, course_id: int, assessment_id: int, questions_
             text("""
                 SELECT question_id, question_text, version_number 
                 FROM questions 
-                WHERE course_id = :cid 
-                  AND assessment_id = :aid 
+                WHERE assessment_id = :aid 
                   AND question_text = :qtxt
                 LIMIT 1
             """),
-            {"cid": course_id, "aid": assessment_id, "qtxt": qtext}
+            {"aid": assessment_id, "qtxt": qtext}
         ).fetchone()
-        
+
         if existing:
             qnum = (G(q, "Question Number", "question_number") or "").strip()
             duplicates.append({
@@ -596,8 +596,8 @@ async def get_questions(
                 q.previous_version_id,
                 q.is_latest
             FROM questions q
-            LEFT JOIN courses c ON q.course_id = c.course_id
             LEFT JOIN assessments a ON q.assessment_id = a.assessment_id
+            LEFT JOIN courses c ON a.course_id = c.course_id
             WHERE 1=1
         """
         params = {}
@@ -730,12 +730,16 @@ async def get_questions(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
+# API #2: More Questions Details with Enhanced Attachment Info
+from fastapi import Request, HTTPException, Depends
+from fastapi.responses import FileResponse
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
-# API #2: More Question Details with Enhanced Attachment Info
 @router.get("/{id}")
-async def get_question_by_id(id: int, db: Session = Depends(get_db)):
+async def get_question_by_id(id: int, request: Request, db: Session = Depends(get_db)):
     """GET /api/questions/:id - Returns full question with enhanced attachment metadata"""
-    try: 
+    try:
         query = text("""
             SELECT 
                 q.*,
@@ -746,11 +750,11 @@ async def get_question_by_id(id: int, db: Session = Depends(get_db)):
                 a.assessment_semester,
                 ctx.context_text,
                 ctx.context_local_id,
-                STRING_AGG(DISTINCT qa.attachment_name, ', ') as question_attachments,
-                STRING_AGG(DISTINCT ca.attachment_name, ', ') as context_attachments
+                STRING_AGG(DISTINCT qa.attachment_name, ', ') AS question_attachments,
+                STRING_AGG(DISTINCT ca.attachment_name, ', ') AS context_attachments
             FROM questions q
-            LEFT JOIN courses c ON q.course_id = c.course_id
             LEFT JOIN assessments a ON q.assessment_id = a.assessment_id
+            LEFT JOIN courses c ON a.course_id = c.course_id
             LEFT JOIN contexts ctx ON q.context_id = ctx.context_id
             LEFT JOIN question_attachments qa ON q.question_id = qa.question_id
             LEFT JOIN context_attachments ca ON ctx.context_id = ca.context_id
@@ -759,13 +763,12 @@ async def get_question_by_id(id: int, db: Session = Depends(get_db)):
                      a.assessment_type, a.assessment_acadyear, a.assessment_semester,
                      ctx.context_text, ctx.context_local_id
         """)
-    
+
         result = db.execute(query, {"id": id})
         row = result.fetchone()
-        
         if not row:
             raise HTTPException(status_code=404, detail="Question not found")
-        
+
         response_data = {
             "question_id": row.question_id,
             "question_number": row.question_number,
@@ -784,62 +787,70 @@ async def get_question_by_id(id: int, db: Session = Depends(get_db)):
             "assessment_semester": row.assessment_semester,
             "created_at": row.created_at.isoformat() if row.created_at else None,
             "version_number": row.version_number,
-            "previous_version_id": row.previous_version_id
+            "previous_version_id": row.previous_version_id,
         }
-        
+
+        # Add options for question types
         if row.question_type in ["MCQ", "MRQ"]:
             options = {}
-            if row.option_a: options["A"] = row.option_a
-            if row.option_b: options["B"] = row.option_b
-            if row.option_c: options["C"] = row.option_c
-            if row.option_d: options["D"] = row.option_d
-            if row.option_e: options["E"] = row.option_e
-            if options: response_data["options"] = options
+            for key in ["A", "B", "C", "D", "E"]:
+                opt_value = getattr(row, f"option_{key.lower()}", None)
+                if opt_value:
+                    options[key] = opt_value
+            if options:
+                response_data["options"] = options
+
         elif row.question_type == "T/F":
             response_data["options"] = {
-                "A": row.option_a if row.option_a else "True",
-                "B": row.option_b if row.option_b else "False"
+                "A": row.option_a or "True",
+                "B": row.option_b or "False"
             }
-        
+
+        # === Context attachments ===
         if row.context_text or row.context_attachments:
             context = {}
             if row.context_text:
                 context["text"] = row.context_text
                 context["context_id"] = row.context_local_id
-            
+
             if row.context_attachments:
                 context_files = []
                 for name in row.context_attachments.split(', '):
-                    if name.strip():
-                        att_info = categorize_attachment(name.strip())
-                        context_files.append({
-                            "name": name.strip(),
-                            "url": f"/api/attachments/{name.strip()}",
-                            "type": att_info['type'],
-                            "mime_type": att_info['mime_type'],
-                            "is_image": att_info['type'] == 'image'
-                        })
+                    name = name.strip()
+                    if not name:
+                        continue
+                    att_info = categorize_attachment(name)
+                    context_files.append({
+                        "name": name,
+                        "url": request.url_for("get_attachment", filename=name),
+                        "type": att_info["type"],
+                        "mime_type": att_info["mime_type"],
+                        "is_image": att_info["type"] == "image"
+                    })
                 if context_files:
                     context["attachments"] = context_files
-            
-            if context:
-                response_data["context"] = context
-        
+
+            response_data["context"] = context
+
+        # === Question attachments ===
         if row.question_attachments:
             question_files = []
             for name in row.question_attachments.split(', '):
-                if name.strip():
-                    att_info = categorize_attachment(name.strip())
-                    question_files.append({
-                        "name": name.strip(),
-                        "url": f"/api/attachments/{name.strip()}",
-                        "type": att_info['type'],
-                        "mime_type": att_info['mime_type'],
-                        "is_image": att_info['type'] == 'image'
-                    })
+                name = name.strip()
+                if not name:
+                    continue
+                att_info = categorize_attachment(name)
+                url = STORAGE_PNG_PATH/name
+                question_files.append({
+                    "name": name,
+                    "url": request.url_for("get_attachment", filename=name),
+                    "type": att_info["type"],
+                    "mime_type": att_info["mime_type"],
+                    "is_image": att_info["type"] == "image"
+                })
             if question_files:
                 response_data["attachments"] = question_files
-        
+
         return {"success": True, "data": response_data}
 
     except HTTPException:
@@ -848,42 +859,37 @@ async def get_question_by_id(id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 
+
 # API for serving attachments
 @router.get("/attachments/{filename}")
 async def get_attachment(filename: str):
     """Serve attachment files with proper MIME types"""
     try:
-        # Check PNG storage first
+        # First look in PNG storage
         file_path = STORAGE_PNG_PATH / filename
         if not file_path.exists():
-            # Check other storage
-            file_path = STORAGE_OTHER_PATH / filename
-        
-        if not file_path.exists():
             raise HTTPException(status_code=404, detail=f"Attachment '{filename}' not found")
-        
-        # Get MIME type
+
+        # Detect MIME type
         mime_type = get_mime_type(filename)
-        
-        # For images, return inline; for others, suggest download
-        if is_image_file(filename):
-            return FileResponse(
-                file_path,
-                media_type=mime_type,
-                headers={"Content-Disposition": f"inline; filename={filename}"}
-            )
-        else:
-            return FileResponse(
-                file_path,
-                media_type=mime_type,
-                headers={"Content-Disposition": f"attachment; filename={filename}"}
-            )
-    
+
+        # Return as inline for images, as download for others
+        content_disposition = (
+            f"inline; filename={filename}"
+            if is_image_file(filename)
+            else f"attachment; filename={filename}"
+        )
+
+        return FileResponse(
+            path=file_path,
+            media_type=mime_type,
+            headers={"Content-Disposition": content_disposition},
+        )
+
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error serving attachment: {str(e)}")
-
 
 # API #3: Fetching ALL Versions (unchanged)
 @router.get("/{id}/versions")
@@ -925,8 +931,8 @@ async def get_question_versions(id: int, db: Session = Depends(get_db)):
                 vt.previous_version_id, vt.is_latest, vt.difficulty, vt.concepts, vt.created_at,
                 c.course_code, c.course_name, a.assessment_type, a.assessment_acadyear, a.assessment_semester
             FROM version_tree vt
-            LEFT JOIN courses c ON vt.course_id = c.course_id
             LEFT JOIN assessments a ON vt.assessment_id = a.assessment_id
+            LEFT JOIN courses c ON a.course_id = c.course_id
             ORDER BY vt.version_number ASC, vt.created_at ASC
         """)
 
@@ -1108,8 +1114,8 @@ async def edit_upload(id: int, file: UploadFile = File(...), db: Session = Depen
             text("""
                 SELECT c.course_code, a.assessment_type, a.assessment_acadyear, a.assessment_semester
                 FROM questions q
-                JOIN courses c ON q.course_id = c.course_id
                 JOIN assessments a ON q.assessment_id = a.assessment_id
+                JOIN courses c ON a.course_id = c.course_id
                 WHERE q.question_id = :qid
             """),
             {"qid": id}
@@ -1217,7 +1223,7 @@ def confirm_edit(request: ConfirmUploadRequest):
         # Get assessment_id
         assessment_id = session.execute(
             text("SELECT assessment_id FROM assessments WHERE course_id = :cid AND assessment_type = :at AND COALESCE(assessment_acadyear, '') = COALESCE(:ay, '') AND COALESCE(assessment_semester, '') = COALESCE(:sem, '') LIMIT 1"),
-            {"cid": course_id, "at": assessment_type, "ay": ay, "sem": sem}
+            {"cid": course_id, "at": assessment_type, "ay": ay or '', "sem": sem or ''}
         ).scalar()
         
         if not assessment_id:
@@ -1225,7 +1231,7 @@ def confirm_edit(request: ConfirmUploadRequest):
         
         # STEP 2: Check for duplicates
         logger.info("🔍 Step 2: Checking for duplicate questions...")
-        has_duplicates, duplicate_list = check_for_duplicates(session, course_id, assessment_id, questions_data)
+        has_duplicates, duplicate_list = check_for_duplicates(session, assessment_id, questions_data)
         
         if has_duplicates:
             error_msg = f"Found {len(duplicate_list)} duplicate question(s):"
@@ -1240,6 +1246,35 @@ def confirm_edit(request: ConfirmUploadRequest):
                     "duplicates": duplicate_list
                 }
             )
+        
+        logger.info("📝 Step 2.5: Processing contexts...")
+        contexts_data = upload_data.get('contexts_data', [])
+        context_id_map = {}
+
+        for r in contexts_data:
+            context_local_id = (G(r, "Context ID", "context_id", "contextid") or "").strip()
+            context_text = (G(r, "Context Text", "context_text") or "").strip()
+            if not context_local_id or not context_text:
+                continue
+            
+            res = session.execute(
+                text("INSERT INTO contexts (assessment_id, context_local_id, context_text) VALUES (:aid, :clid, :ctxt) ON CONFLICT (assessment_id, context_local_id) DO UPDATE SET context_text = EXCLUDED.context_text RETURNING context_id"),
+                {"aid": assessment_id, "clid": context_local_id, "ctxt": context_text}
+            )
+            ctx_id = res.scalar()
+            context_id_map[context_local_id] = ctx_id
+            
+            # Handle context attachments
+            catt = (G(r, "Attachment", "attachment") or "").strip()
+            if ctx_id and catt:
+                session.execute(
+                    text("INSERT INTO context_attachments (context_id, attachment_name, attachment_url) VALUES (:cid, :name, NULL) ON CONFLICT (context_id, attachment_name) DO NOTHING"),
+                    {"cid": ctx_id, "name": catt}
+                )
+
+        session.commit()
+        logger.info(f"✅ Processed {len(context_id_map)} context(s)")
+
         
         # STEP 3: Process question edit (insert new version)
         logger.info("✏️ Step 3: Processing question edit...")
@@ -1281,17 +1316,17 @@ def confirm_edit(request: ConfirmUploadRequest):
             res = session.execute(
                 text("""
                     INSERT INTO questions (
-                        assessment_id, course_id, context_id, question_number, sub_question_number,
+                        assessment_id, context_id, question_number, sub_question_number,
                         question_text, question_type, option_a, option_b, option_c, option_d, option_e,
                         correct_answer, explanation, points, difficulty, concepts,
                         version_number, previous_version_id, is_latest
                     ) VALUES (
-                        :aid, :cid, NULL, :qnum, :sqnum, :qtxt, :qtype, :a, :b, :c, :d, :e,
+                        :aid, NULL, :qnum, :sqnum, :qtxt, :qtype, :a, :b, :c, :d, :e,
                         :ans, :expl, :pts, :diff, :conc, :ver, :prev_id, TRUE
                     )
                     RETURNING question_id
                 """),
-                {"aid": assessment_id, "cid": course_id, "qnum": qnum, "sqnum": sqnum,
+                {"aid": assessment_id, "qnum": qnum, "sqnum": sqnum,
                  "qtxt": qtext, "qtype": qtype, "a": a, "b": b, "c": c, "d": d, "e": e,
                  "ans": ans, "expl": expl, "pts": pts, "diff": diff, "conc": conc,
                  "ver": new_ver, "prev_id": prev_id}
@@ -1689,20 +1724,21 @@ async def confirm_upload(request: ConfirmUploadRequest):
             text("SELECT assessment_id FROM assessments WHERE course_id = :cid AND assessment_type = :at AND COALESCE(assessment_acadyear, '') = COALESCE(:ay, '') AND COALESCE(assessment_semester, '') = COALESCE(:sem, '') LIMIT 1"),
             {"cid": course_id, "at": assessment_type, "ay": ay, "sem": sem}
         ).scalar()
-        
+
         if not assessment_id:
+            logger.info(f"📝 Creating new assessment: {assessment_type} for {course_code}")
             result = session.execute(
                 text("INSERT INTO assessments (course_id, assessment_type, assessment_acadyear, assessment_semester) VALUES (:cid, :at, :ay, :sem) RETURNING assessment_id"),
                 {"cid": course_id, "at": assessment_type, "ay": ay, "sem": sem}
             )
             assessment_id = result.scalar()
-        
+            logger.info(f"✅ Created assessment_id: {assessment_id}")
+
         session.commit()
-        
+                
         # STEP 2: Check for duplicate questions
         logger.info("🔍 Step 3: Checking for duplicate questions...")
-        has_duplicates, duplicate_list = check_for_duplicates(session, course_id, assessment_id, questions_data)
-        
+        has_duplicates, duplicate_list = check_for_duplicates(session, assessment_id, questions_data)        
         if has_duplicates:
             error_msg = f"Found {len(duplicate_list)} duplicate question(s):"
             for dup in duplicate_list:
@@ -1727,8 +1763,8 @@ async def confirm_upload(request: ConfirmUploadRequest):
                 continue
             
             res = session.execute(
-                text("INSERT INTO contexts (assessment_id, course_id, context_local_id, context_text) VALUES (:aid, :cid, :clid, :ctxt) ON CONFLICT (assessment_id, context_local_id) DO UPDATE SET context_text = EXCLUDED.context_text RETURNING context_id"),
-                {"aid": assessment_id, "cid": course_id, "clid": context_local_id, "ctxt": context_text}
+                text("INSERT INTO contexts (assessment_id, context_local_id, context_text) VALUES (:aid, :clid, :ctxt) ON CONFLICT (assessment_id, context_local_id) DO UPDATE SET context_text = EXCLUDED.context_text RETURNING context_id"),
+                {"aid": assessment_id, "clid": context_local_id, "ctxt": context_text}
             )
             ctx_id = res.scalar()
             context_id_map[context_local_id] = ctx_id
@@ -1774,16 +1810,16 @@ async def confirm_upload(request: ConfirmUploadRequest):
             res = session.execute(
                 text("""
                     INSERT INTO questions (
-                        assessment_id, course_id, context_id, question_number, sub_question_number,
+                        assessment_id, context_id, question_number, sub_question_number,
                         question_text, question_type, option_a, option_b, option_c, option_d, option_e,
                         correct_answer, explanation, points, difficulty, concepts, version_number, is_latest
                     ) VALUES (
-                        :aid, :cid, :ctx, :qnum, :sqnum, :qtxt, :qtype, :a, :b, :c, :d, :e,
+                        :aid, :ctx, :qnum, :sqnum, :qtxt, :qtype, :a, :b, :c, :d, :e,
                         :ans, :expl, :pts, :diff, :conc, 1, TRUE
                     )
                     RETURNING question_id
                 """),
-                {"aid": assessment_id, "cid": course_id, "ctx": ctx_id, "qnum": qnum, "sqnum": sqnum,
+                {"aid": assessment_id, "ctx": ctx_id, "qnum": qnum, "sqnum": sqnum,
                  "qtxt": qtext, "qtype": qtype, "a": a, "b": b, "c": c, "d": d, "e": e,
                  "ans": ans, "expl": expl, "pts": pts, "diff": diff, "conc": conc}
             )
@@ -1960,9 +1996,10 @@ async def get_question_suggestions(id: int, db: Session = Depends(get_db), top_n
     """Suggest variant questions based on course, difficulty, type, and concepts"""
     try:
         ref_query = text("""
-            SELECT q.question_id, q.question_text, q.question_type, q.difficulty, q.concepts, q.course_id, c.course_code
+            SELECT q.question_id, q.question_text, q.question_type, q.difficulty, q.concepts, a.course_id, c.course_code
             FROM questions q
-            LEFT JOIN courses c ON q.course_id = c.course_id
+            LEFT JOIN assessments a ON q.assessment_id = a.assessment_id
+            LEFT JOIN courses c ON a.course_id = c.course_id
             WHERE q.question_id = :id
         """)
         
@@ -1974,9 +2011,9 @@ async def get_question_suggestions(id: int, db: Session = Depends(get_db), top_n
             SELECT q.question_id, q.question_text, q.question_type, q.difficulty, q.concepts, 
                    c.course_code, a.assessment_type, q.version_number, q.is_latest, q.previous_version_id
             FROM questions q
-            LEFT JOIN courses c ON q.course_id = c.course_id
             LEFT JOIN assessments a ON q.assessment_id = a.assessment_id
-            WHERE q.course_id = :course_id 
+            LEFT JOIN courses c ON a.course_id = c.course_id
+            WHERE a.course_id = :course_id 
                 AND q.difficulty = :difficulty 
                 AND q.question_type = :qtype
                 AND q.question_id != :id

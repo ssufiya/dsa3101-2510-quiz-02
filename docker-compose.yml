@@ -47,12 +47,14 @@ services:
       DB_PORT: 5432
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      PGPASSWORD: postgres
       DB_NAME: ${DB_NAME:-quizbank}
       PYTHONPATH: /app
       # Bootstrap configuration
       RESTORE_IF_BACKUP: ${RESTORE_IF_BACKUP:-1}
       SEED_FORCE: ${SEED_FORCE:-0}
     volumes:
+      - ./backend/app:/app/app:rw
       # Prevent __pycache__ from syncing
       - /app/__pycache__
       # Storage for PNG attachments (live working directory)
