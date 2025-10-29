@@ -171,6 +171,45 @@ def ensure_assessment_unique_index(session) -> None:
     """))
     session.commit()
 
+def ensure_questions_unique_key(session) -> None:
+    """
+    Make sure questions de-dup is (assessment_id, question_text), not the old
+    (course_id, assessment_id, question_text). Safe to re-run.
+    """
+    # Drop legacy constraint if it exists
+    session.execute(text("""
+        DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1
+                FROM   pg_constraint c
+                JOIN   pg_class t ON t.oid = c.conrelid
+                WHERE  t.relname = 'questions'
+                AND    c.conname = 'uq_question'
+            ) THEN
+                ALTER TABLE questions DROP CONSTRAINT uq_question;
+            END IF;
+        END$$;
+    """))
+
+    # Create the new one if missing
+    session.execute(text("""
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1
+                FROM   pg_constraint c
+                JOIN   pg_class t ON t.oid = c.conrelid
+                WHERE  t.relname = 'questions'
+                AND    c.conname = 'uq_question'
+            ) THEN
+                ALTER TABLE questions
+                ADD CONSTRAINT uq_question UNIQUE (assessment_id, question_text);
+            END IF;
+        END$$;
+    """))
+    session.commit()
+
 def ensure_schema(session) -> None:
     """Apply 01_schema.sql if core tables missing; guard constraints; dedupe; add coalesced unique index."""
     need_schema = not table_exists(session, "courses") or not table_exists(session, "questions")
@@ -217,6 +256,8 @@ def ensure_schema(session) -> None:
         print(f"🧹 Removed {removed} duplicate assessment rows before indexing.")
 
     ensure_assessment_unique_index(session)
+    ensure_questions_unique_key(session)
+
 
 def ensure_system_meta(session) -> None:
     session.execute(text("""
@@ -532,14 +573,13 @@ def load_contexts_from_csvs(session, data_dirs) -> tuple[int, int]:
             # upsert context
             res = session.execute(
                 text("""
-                  INSERT INTO contexts (assessment_id, course_id, context_local_id, context_text)
-                  VALUES (:aid, :cid, :clid, :ctxt)
-                  ON CONFLICT (assessment_id, context_local_id)
-                  DO UPDATE SET context_text = EXCLUDED.context_text
-                  RETURNING context_id
+                INSERT INTO contexts (assessment_id, context_local_id, context_text)
+                VALUES (:aid, :clid, :ctxt)
+                ON CONFLICT (assessment_id, context_local_id)
+                DO UPDATE SET context_text = EXCLUDED.context_text
+                RETURNING context_id
                 """),
-                {"aid": assessment_id, "cid": course_id,
-                 "clid": context_local_id, "ctxt": context_text}
+                {"aid": assessment_id, "clid": context_local_id, "ctxt": context_text}
             )
             ctx_id = res.scalar()
             file_upserts += 1
@@ -693,24 +733,24 @@ def load_questions_from_csvs(session, data_dirs) -> tuple[int, int]:
             # upsert by natural key
             res = session.execute(
                 text("""
-                  INSERT INTO questions (
-                    assessment_id, course_id, context_id,
+                INSERT INTO questions (
+                    assessment_id, context_id,
                     question_number, sub_question_number,
                     question_text, question_type,
                     option_a, option_b, option_c, option_d, option_e,
                     correct_answer, explanation, points, difficulty, concepts,
                     version_number, is_latest
-                  )
-                  VALUES (
-                    :aid, :cid, :ctx,
+                )
+                VALUES (
+                    :aid, :ctx,
                     :qnum, :sqnum,
                     :qtxt, :qtype,
                     :a, :b, :c, :d, :e,
                     :ans, :expl, :pts, :diff, :conc,
                     1, TRUE
-                  )
-                  ON CONFLICT (course_id, assessment_id, question_text)
-                  DO UPDATE SET
+                )
+                ON CONFLICT (assessment_id, question_text)
+                DO UPDATE SET
                     question_type  = EXCLUDED.question_type,
                     option_a       = EXCLUDED.option_a,
                     option_b       = EXCLUDED.option_b,
@@ -724,16 +764,17 @@ def load_questions_from_csvs(session, data_dirs) -> tuple[int, int]:
                     concepts       = EXCLUDED.concepts,
                     context_id     = COALESCE(EXCLUDED.context_id, questions.context_id),
                     is_latest      = TRUE
-                  RETURNING question_id
+                RETURNING question_id
                 """),
                 {
-                    "aid": assessment_id, "cid": course_id, "ctx": ctx_id,
+                    "aid": assessment_id, "ctx": ctx_id,
                     "qnum": qnum, "sqnum": subqnum,
                     "qtxt": qtext, "qtype": qtype,
                     "a": a, "b": b, "c": c, "d": d, "e": e,
                     "ans": ans, "expl": expl, "pts": pts, "diff": diff, "conc": conc
                 }
             )
+
             qid = res.scalar()
             file_upserts += 1
 

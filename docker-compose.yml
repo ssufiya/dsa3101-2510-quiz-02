@@ -56,9 +56,7 @@ services:
       # Prevent __pycache__ from syncing
       - /app/__pycache__
       # Storage for PNG attachments (live working directory)
-      - ./backend/quizbank-db/storage/png:/app/quizbank-db/storage/png
-      # Upload staging directory
-      - ./backend/quizbank-db/uploads:/app/quizbank-db/uploads
+      - ./backend/quizbank-db/storage:/app/storage:rw
       # Backup directories (shared with host)
       - ./backend/backups:/app/backups
       - ./backend/backups/quizbank:/app/backups/quizbank

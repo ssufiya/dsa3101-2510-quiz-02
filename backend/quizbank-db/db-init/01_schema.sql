@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS assessments (
 CREATE TABLE IF NOT EXISTS contexts (
   context_id       BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   assessment_id    BIGINT      NOT NULL REFERENCES assessments(assessment_id) ON DELETE CASCADE,
-  course_id        BIGINT      NOT NULL REFERENCES courses(course_id)     ON DELETE CASCADE,
+  -- course_id        BIGINT      NOT NULL REFERENCES courses(course_id)     ON DELETE CASCADE,
   context_local_id VARCHAR(64) NOT NULL,
   context_text     TEXT        NOT NULL,
 
@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS context_attachments (
 CREATE TABLE IF NOT EXISTS questions (
   question_id      BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   assessment_id    BIGINT      NOT NULL REFERENCES assessments(assessment_id) ON DELETE CASCADE,
-  course_id        BIGINT      NOT NULL REFERENCES courses(course_id)     ON DELETE CASCADE,
+  -- course_id        BIGINT      NOT NULL REFERENCES courses(course_id)     ON DELETE CASCADE,
   context_id       BIGINT      REFERENCES contexts(context_id) ON DELETE SET NULL,
 
   question_number      INTEGER,
@@ -86,7 +86,7 @@ CREATE TABLE IF NOT EXISTS questions (
   is_latest            BOOLEAN      NOT NULL DEFAULT TRUE,
 
   -- natural de-dup key (matches your updater)
-  CONSTRAINT uq_question UNIQUE (course_id, assessment_id, question_text)
+  CONSTRAINT uq_question UNIQUE (assessment_id, question_text)
 );
 
 -- self-referential FKs for versioning

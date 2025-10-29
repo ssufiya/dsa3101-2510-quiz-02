@@ -11,3 +11,14 @@ __pycache__/
 *.pyc
 .env
 .env.local
+# Backups & storage (keep empty dir via .gitkeep)
+backend/backups/**
+!backend/backups/.gitkeep
+backend/quizbank-db/storage/**
+!backend/quizbank-db/storage/.gitkeep
+
+# OS & Python cruft
+.DS_Store
+**/__pycache__/
+*.pyc
+backend/quizbank-db/archives/**

@@ -67,6 +67,11 @@ if [ "$RESTORE_IF_BACKUP" = "1" ] && backup_has_data "$LATEST_DUMP"; then
   echo "📦 Backup found & non-empty — restoring…"
   bash "$SCRIPTS/restore_db.sh"
   RAN_ACTION="restore"
+  
+  echo "🗂 Restoring assets snapshot…"
+  bash "$SCRIPTS/restore_assets.sh" || echo "⚠️ restore_assets.sh failed (continuing)"
+  RAN_ACTION="restore"
+
 else
   if [ "$RESTORE_IF_BACKUP" = "1" ] && [ -f "$LATEST_DUMP" ]; then
     echo "⚠️  latest.sql.gz exists but appears EMPTY. Seeding instead."
@@ -85,6 +90,10 @@ else
 
   echo "💾 Creating immediate backup after seed…"
   bash "$SCRIPTS/backup_db.sh"
+
+  echo "🗂 Backing up assets after seed…"
+  bash "$SCRIPTS/backup_assets.sh" || echo "⚠️ backup_assets.sh failed (continuing)"
+  
 fi
 
 # --- Sanity check: counts from core tables ---
