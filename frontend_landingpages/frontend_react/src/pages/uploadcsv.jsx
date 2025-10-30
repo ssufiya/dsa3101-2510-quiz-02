@@ -186,7 +186,7 @@ export function UploadCSV({ onBack }) {
             <ArrowLeft className="h-4 w-4" />
             <span>Back to Dashboard</span>
           </Button>
-          <h1 className="text-xl font-semibold">Upload Questions & Contexts</h1>
+          <h1 className="text-xl font-semibold" style={{ marginLeft: "40px" }}>Upload Questions & Contexts</h1>
         </div>
       </header>
 

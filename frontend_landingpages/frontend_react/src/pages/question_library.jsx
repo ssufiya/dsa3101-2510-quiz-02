@@ -9,7 +9,8 @@ import { Button } from "../components/button";
 import { Badge } from "../components/badge";
 import {
   ArrowLeft,
-  StickyNote,
+  Paperclip,
+  Notebook,
   GripVertical,
   HelpCircle,
   ChevronDown,
@@ -137,7 +138,7 @@ function QuestionCard({ question, onQuestionDetails, onAddToCart, isInCart }) {
         {/* Metadata */}
         <div className="flex justify-between items-start mb-3">
           <div className="flex items-center space-x-1 text-sm text-muted-foreground">
-            <StickyNote className="h-4 w-4" />
+            <Paperclip className="h-4 w-4" />
             <span>{question.question_id || 0}</span>
           </div>
           <div className="flex items-center space-x-2">
@@ -306,7 +307,7 @@ export function QuestionLibrary({
   return (
     <div style={{ minHeight: "100vh", backgroundColor: "#f9fafb", display: "flex", flexDirection: "column" }}>
       {/* HEADER */}
-      <header style={{ backgroundColor: "white", borderBottom: "1px solid #e5e7eb" }}>
+      <header style={{ backgroundColor: "white", borderBottom: "1px solid #e5e7eb", paddingBottom: "30px", }}>
         <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "0 24px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", height: "64px", position: "relative" }}>
             {/* Left: Back */}
@@ -319,10 +320,10 @@ export function QuestionLibrary({
 
             {/* Center: Title */}
             <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", textAlign: "center" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", marginTop: "30px"}}>
                 <div>
-                  <h1 style={{ fontSize: "20px", fontWeight: "600", margin: 0 }}>Question Library</h1>
-                  <p style={{ fontSize: "14px", color: "#6b7280", margin: 0 }}>Browse questions from the database</p>
+                  <h1 style={{ fontSize: "50px", fontWeight: "600", margin: 0 }}>Question Library</h1>
+                  <p style={{ fontSize: "14px", color: "#6b7280",  marginTop: "8px", marginBottom: "20px"}}>Browse questions from the database</p>
                 </div>
               </div>
             </div>
@@ -353,8 +354,8 @@ export function QuestionLibrary({
         <MultiSelectDropdown label="Select Type" options={types} selected={filters.types} setSelected={(vals) => setFilters({ ...filters, types: vals })} />
         <MultiSelectDropdown label="Select Course" options={courses} selected={filters.courses} setSelected={(vals) => setFilters({ ...filters, courses: vals })} />
         <MultiSelectDropdown label="Select Semester" options={semesters} selected={filters.semesters} setSelected={(vals) => setFilters({ ...filters, semesters: vals })} />
-        <Input placeholder="Search for topic..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-64" />
-        <SingleSelectDropdown label="Select Match Mode" options={["Match All", "Match Any"]} selected={filters.matchMode} setSelected={(val) => setFilters({ ...filters, matchMode: val })} />
+        <Input placeholder="Search for topic..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-64 rounded-lg text-center" />
+        <SingleSelectDropdown label="Filter by" options={["Match All", "Match Any"]} selected={filters.matchMode} setSelected={(val) => setFilters({ ...filters, matchMode: val })} />
       </div>
 
       {/* ACTION BUTTONS */}
