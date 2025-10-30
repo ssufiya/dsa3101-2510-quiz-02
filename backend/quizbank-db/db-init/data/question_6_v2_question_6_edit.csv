@@ -1,2 +1,0 @@
-question_text,explanation,course_name,course_code,assessment_type,difficulty,points,concepts,option_a,option_b,option_c,option_d
-"How to explore the association between the response bbd and age?","","Introduction to Data Science","DSA1101","Quiz2","High",1,"Data Manipulation,  Basic Concepts in Statistics,  EDA","Box plot of age for two groups of bbd","Histogram of age","Correlation coefficient of bbd and age","Scatter plot for bbd and age"
