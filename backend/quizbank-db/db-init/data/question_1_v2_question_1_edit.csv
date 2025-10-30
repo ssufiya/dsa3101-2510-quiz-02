@@ -1,0 +1,5 @@
+question_text,explanation,course_code,assessment_type,difficulty,points,concepts,option_a,option_b,option_c,option_d,option_e
+"How many explanatory variables are there in the Naïve Bayes classifier “nb_model”?","data set “banktrain” has 11 columns (after dropping 6 unwanted columns).
+Model was formed as 
+nb_model <- naiveBayes( subscribed ~ . , data = banktrain)
+where the response variable “subscribed” depends on a dot. This dot is to replace for “ALL OTHER COLUMNS” in data = banktrain. Hence, there are 10 columns used as explanatories in the model.","DSA1101","Quiz6","low",1,"Supervised Learning,  Data Manipulation,  Naïve Bayes","6","7","8","9","10"

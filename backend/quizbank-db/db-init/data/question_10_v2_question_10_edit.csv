@@ -1,0 +1,2 @@
+question_text,explanation,course_name,course_code,assessment_type,difficulty,points,concepts,option_a,option_b,option_c
+"A group of 60 freshmen are to be randomly assigned into two classes of 30 students each, one on the first floor and one on the second floor. In how many ways can this be done?","testing","Probability","ST2131","Questions","Low",1,"Combinations (Unordered Selection),  Binomial Coefficient,  Combinatorics","60C30","(60C30) / 2!","2! X (60C30)"
