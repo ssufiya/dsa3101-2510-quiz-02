@@ -38,18 +38,16 @@ import sys
 import time
 from pathlib import Path
 from typing import Iterable, Optional, Tuple
-
 from sqlalchemy import text
 
 # ── Path bootstrapping so `import app...` works from repo root or subfolders ──
 SCRIPT_DIR = Path(__file__).resolve().parent
 BACKEND_DIR = SCRIPT_DIR.parent.parent  # .../backend
-if str(BACKEND_DIR) not in sys.path:
-    sys.path.insert(0, str(BACKEND_DIR))
+sys.path.insert(0, str(BACKEND_DIR))
 
 # Project modules
-from app.db.connection import engine, SessionLocal
-from app.utils.file_parser import parse_csv  # robust CSV bytes -> list[dict]
+from app.db import engine, SessionLocal
+from app.utils.file_parser import parse_csv
 
 # ── Constants & Paths ─────────────────────────────────────────────────────────
 DB_INIT_DIR = SCRIPT_DIR.parent / "db-init"               # .../quizbank-db/db-init

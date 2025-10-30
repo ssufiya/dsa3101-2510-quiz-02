@@ -54,17 +54,12 @@ services:
       RESTORE_IF_BACKUP: ${RESTORE_IF_BACKUP:-1}
       SEED_FORCE: ${SEED_FORCE:-0}
     volumes:
-      - ./backend/app:/app/app:rw
-      # Prevent __pycache__ from syncing
-      - /app/__pycache__
-      # Storage for PNG attachments (live working directory)
-      - ./backend/quizbank-db/storage:/app/storage:rw
+      - ./backend/app:/app/app:ro
+      # Attachments storage
+      - ./backend/quizbank-db/attachment_storage:/app/quizbank-db/attachment_storage:rw
       # Backup directories (shared with host)
-      - ./backend/backups:/app/backups
-      - ./backend/backups/quizbank:/app/backups/quizbank
-      - ./backend/backups/assets:/app/backups/assets
-      # Uploads directory
-      - ./backend/uploads:/app/uploads
+      - ./backend/backups/quizbank:/app/backups/quizbank:rw
+      - ./backend/backups/assets:/app/backups/assets:rw
       # Database init scripts and data
       - ./backend/quizbank-db/db-init:/app/quizbank-db/db-init:ro
       - ./backend/quizbank-db/scripts:/app/quizbank-db/scripts
