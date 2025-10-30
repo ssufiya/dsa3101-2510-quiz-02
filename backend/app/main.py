@@ -3,7 +3,7 @@ FastAPI application entry point
 """
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.questions import routes as questions_routes
+from app.app import router
 
 app = FastAPI(
     title="Quiz Bank API",
@@ -22,7 +22,7 @@ app.add_middleware(
 
 # Include questions router
 app.include_router(
-    questions_routes.router, 
+    router, 
     prefix="/api/questions", 
     tags=["Questions"]
 )

@@ -10,7 +10,7 @@ def validate_question_data(question: dict) -> list:
     errors = []
 
     required_fields = [
-        'question_text', 'course_code', 'course_name', 'difficulty', 'concepts'
+        'question_text', 'course_code', 'course_name', 'assessment_type', 'difficulty', 'concepts'
     ]
 
     for field in required_fields:
@@ -18,7 +18,7 @@ def validate_question_data(question: dict) -> list:
             errors.append(f"Missing required field; {field}")
 
     if 'difficulty' in question and question['difficulty']:
-         valid_difficulties = ['Low', 'Med', 'High']
+         valid_difficulties = ['Easy', 'Medium', 'Hard']
          if question['difficulty'] not in valid_difficulties:
             errors.append(f"difficulty must be one of : {', '.join(valid_difficulties)}")
     
@@ -36,8 +36,8 @@ def validate_question_data(question: dict) -> list:
             valid_answers = ['A', 'B', 'C', 'D', 'E']    
             if question['correct_answer'].upper() not in valid_answers:
                         errors.append(f"For MCQ questions, correct_answer must be A, B, D, D, or E")
-    elif 'question_type' in question and question['question_type'] == 'T/F':
-        if 'correct_answer' in question and question['correct_answer']:
+    elif 'question_type' in question and question['question_type'] == 'True/False':
+        if 'cprrect_answer' in question and question['correct_answer']:
             valid_answers = ['True', 'false', 'TRUE', 'FALSE', 'T', 'F']    
             if question['correct_answer'].upper() not in valid_answers:
                     errors.append(f"For True/False questions, correct_answer must be True or False")
