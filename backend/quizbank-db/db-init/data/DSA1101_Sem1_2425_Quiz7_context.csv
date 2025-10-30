@@ -1,0 +1,7 @@
+Context ID,Context Text,Attachment
+1,"Data files <churn.csv> is provided on Canvas.
+Please open the R code file attached <Quiz7.R> and run the code to answer the questions below.
+All the log calculation mentioned in this quiz is the natural log (base e).
+Note: to run the code file smoothly, you might need to:
+Download the data file above.
+Set working directory in R to the folder that contains the data file: setwd()",DSA1101_Sem1_2425_Quiz7.R

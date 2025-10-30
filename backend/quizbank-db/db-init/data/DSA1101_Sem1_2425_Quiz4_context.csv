@@ -1,0 +1,3 @@
+Context ID,Context Text,Attachment
+1,"Consider data set <Smarket.csv>. One would want to split this data set into two parts randomly: one part is used to form a model, and other part is used to test the goodness of fit of the model. R code is given in the photo.",DSA1101_Sem1_2425_Quiz4_Figure1.png
+2,"There are 9 students with the names are: A, B, C, D, E, F, G, H and I. We would want to form 3 groups where each group has 2 students by a random way. The R code is given in the photo below.",DSA1101_Sem1_2425_Quiz4_Figure2.png

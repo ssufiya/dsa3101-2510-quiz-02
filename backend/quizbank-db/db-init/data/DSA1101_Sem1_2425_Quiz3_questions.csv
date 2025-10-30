@@ -1,0 +1,28 @@
+Context ID,Question Number,Sub-Question Number,Question Text,Question Type,Option A,Option B,Option C,Option D,Option E,Correct Answer,Explanation,Points,Difficulty,Concepts,Attachment
+1,1,,"How many coefficients that the correct model with 3 variables (weight, width and color) should have (including the intercept)?",MCQ,4,5,6,7,,C,Intercept + 1 for weight + 1 for width + 3 for color (because color is categorical) = 6,,Low,Linear Modeling,
+1,2,,R code is given in the photo below. How many coefficients does model M1 created from this code have?,MCQ,4,5,6,7,,A,"Because column ‚Äúcolor‚Äù inside data frame ‚Äúcrab‚Äù is still recognized by R as a numeric column by the code at line 8. In line 10, as.factor() is used, but it is to create a vector called ‚Äúcolor‚Äù ‚Äì be a categorical, but this vector is NOT inside data frame ‚Äúcrab‚Äù. 
+Model M1 is fitted in line 12 uses column ‚Äúcolor‚Äù inside data frame ‚Äúcrab‚Äù which is still numeric.",,Low,Linear Modeling,DSA1101_Sem1_2425_Quiz3_Figure1.png
+1,3,,"In the R code given, how many coefficients does model M2 have? ",MCQ,4,5,6,7,,C,"R code for model M2 in line 12 doesn‚Äôt specify the data frame where the variables come from. Hence, R will use satell, width and weight from data frame ‚Äúcrab‚Äù since the command attach(crab) was run, hence R knows what satell, width and weight are. For color, after attach(crab), R updates that ‚Äúcolor‚Äù is categorical from the code in line 10.",,Low,Linear Modeling,DSA1101_Sem1_2425_Quiz3_Figure1.png
+1,4,,The coefficient table from the summary output of model M2 and model M3 will be the same. True or False?,T/F,True,False,,,,A,"The R code in line 16 has declared with R that column ‚Äúcolor‚Äù inside data frame ‚Äúcrab‚Äù is categorical, hence, when fitting M3 with ‚Äúdata = crab‚Äù in line 18, R will have 3 coefficients for color. 
+It‚Äôs recommended to fit a linear model as M3.",,Low,Linear Modeling,DSA1101_Sem1_2425_Quiz3_Figure1.png
+1,5,,"What is the output of the code at line 20, <predict(M3)>?",MRQ,The fitted values of model M3.,"The predicted values of satell from model M3, for all the crabs in the data set.",The real values of response for the crabs in the data set.,,,A.B,,,Low,Linear Modeling,DSA1101_Sem1_2425_Quiz3_Figure1.png
+1,6,,"To get the predicted response values using model M3, for all the crabs given in the data set, we use R code in line 22, <M3$fitted.values>. True or False?",T/F,True,False,,,,A,,,Low,Linear Modeling,DSA1101_Sem1_2425_Quiz3_Figure1.png
+1,7,,"Using model M3 to predict the number of satell for a new crab with color = 4, width = 26 cm, weight = 2.6 kg. The code is given in lines 24 and 26. The code is correct. True or False?",T/F,True,False,,,,B,"Model M3 has color as categorical, hence when creating a new crab, we need to specify color as categorical, by putting the number inside a quote sign, such as:
+new.crab = data.frame(weight = 2.6, width = 26, color = ‚Äú4‚Äù)
+predict(M3, newdata = new.crab)
+should predict the number of satellites for the new crab.",,Low,Linear Modeling,DSA1101_Sem1_2425_Quiz3_Figure1.png
+1,8,,"A simple model M4 is fitted where the number of satellites only depends on the weight. 
+After that, using model M4 to predict the response for the new crab with weight = 2.6 kg. R code is given below. The code is correct. True or False?",T/F,True,False,,,,B,"From the code in line 28, we told R that model M4 is built with the values for ‚Äúweight‚Äù that must be from a column inside a data frame called ‚Äúcrab‚Äù, specified by crab$weight. 
+Hence, when we use model M4 to predict for a new data point where this new one has ‚Äúweight‚Äù from a data frame with the name ‚Äúnew‚Äù (in the line 30), R will not produce the prediction we want.
+R will just produce the prediction for the data that were used to fit the model, ‚Äúcrab‚Äù.
+How to fix the issue above?
+Either we change the way to fit M4 as below, then the code will work:
+M4 = lm(satell ~ weight, data = crab) # note: do not use the form of data$y ~ data$x
+new = data.frame(weight = 2.6)
+predict(M4, newdata = new)
+
+OR we must name the new data frame as the same as the original data frame as below.
+M4 = lm(crab$satell ~ crab$weight, data = crab) 
+crab = data.frame(weight = 2.6)
+predict(M4, newdata = crab)
+Note: this latter method is not recommended, since if we do this, we will not have the original data frame ‚Äúcrab‚Äù in R anymore, since it is now replaced by the new one.",,Low,Linear Modeling,DSA1101_Sem1_2425_Quiz3_Figure2.png
