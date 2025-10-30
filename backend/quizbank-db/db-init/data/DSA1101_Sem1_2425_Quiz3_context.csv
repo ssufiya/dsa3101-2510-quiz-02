@@ -1,3 +1,0 @@
-Context ID,Context Text,Attachment
-1,"Consider data set <crab.csv> where we are interested in satell -  the number of male crabs grouped around a female horse shoe crab during the mating season (called satellite). The possible regressors are the weight (kg) and the width (cm) of the female crab; the female crab's color (categorical, 2 = light; 3 = medium, 4 = dark, and 5 = darker).
-Data set was imported into R and a model with 3 variables weight, width and color was built. ",

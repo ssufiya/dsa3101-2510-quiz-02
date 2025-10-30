@@ -1,5 +1,0 @@
-Context ID,Context Text,Attachment
-1,"In the R code file for Topic 1, <Topic1_Rcode.R>, there is a part of code as below:
-data1<-read.csv(""C:/Data/crab.txt"",sep = """", header = TRUE)
-
-data1[1:8,] #first 8 rows. The output is below.",DSA1101_Sem1_2425_Quiz1_Figure1.png

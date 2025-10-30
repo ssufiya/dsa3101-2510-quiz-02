@@ -149,10 +149,24 @@ export default function EditQuestion({ questionId, questionData, onBack, onSave 
 
   return (
     <>
+      {/* --- Page Header --- */}
+      <div
+        style={{
+          textAlign: "center",
+          marginBottom: "20px",
+          marginTop: "10px",
+        }}
+      >
+        <h1 style={{ fontSize: "32px", fontWeight: "600", color: "#111827" }}>
+          Edit Question
+        </h1>
+        <p style={{ color: "#6b7280", fontSize: "14px" }}>
+          Update the question details and save a new version
+        </p>
+      </div>
+
+      {/* --- Main Card --- */}
       <Card style={{ padding: "16px" }}>
-        <CardHeader>
-          <CardTitle>Edit Question</CardTitle>
-        </CardHeader>
         <CardContent>
           <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
             <label>Course Name</label>
@@ -236,8 +250,9 @@ export default function EditQuestion({ questionId, questionData, onBack, onSave 
         >
           <div
             style={{
-              width: "500px", height: "300px",
-              backgroundColor: modalType === "success" ? "#16a34a" : "#dc2626", // solid bg
+              width: "500px",
+              height: "300px",
+              backgroundColor: modalType === "success" ? "#16a34a" : "#dc2626",
               color: "white",
               border: `4px solid ${modalType === "success" ? "#166534" : "#991b1b"}`,
               borderRadius: "16px",
@@ -278,4 +293,5 @@ export default function EditQuestion({ questionId, questionData, onBack, onSave 
       </Dialog>
     </>
   );
+
 }
