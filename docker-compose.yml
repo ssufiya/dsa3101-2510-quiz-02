@@ -50,23 +50,21 @@ services:
       - quizbank-network
 
   # Frontend (commented out for now - uncomment when ready)
-  # frontend:
-  #   build:
-  #     context: ./frontend
-  #     dockerfile: Dockerfile
-  #   container_name: quizbank-frontend
-  #   restart: unless-stopped
-  #   ports:
-  #     - "${FRONTEND_PORT:-3000}:3000"
-  #   environment:
-  #     - REACT_APP_API_URL=http://localhost:5000
-  #   volumes:
-  #     - ./frontend:/app
-  #     - /app/node_modules
-  #   depends_on:
-  #     - backend
-  #   networks:
-  #     - quizbank-network
+  frontend:
+    build:
+      context: ./frontend_landingpages/frontend_react
+      dockerfile: Dockerfile
+    container_name: quizbank-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"   # maps host 3000 → container port 80 (nginx)
+    environment:
+      - VITE_API_BASE_URL=http://backend:5000
+    depends_on:
+      - backend
+    networks:
+      - quizbank-network
+
 
 volumes:
   postgres_data:
