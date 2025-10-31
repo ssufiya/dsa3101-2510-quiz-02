@@ -32,6 +32,24 @@ until pg_isready -h db -U postgres > /dev/null 2>&1; do
 done
 echo "✅ DB is ready."
 
+# --- Check if DB already has data (skip restore/seed) ---
+FORCE_RESTORE="${FORCE_RESTORE:-0}"    # Allow manual override
+
+if [ "$FORCE_RESTORE" = "1" ]; then
+  echo "⚠️  FORCE_RESTORE=1 set — will ignore existing data and continue restore/seed."
+else
+  echo "🔎 Checking if DB has user data..."
+  HAS_ROWS=$(psql -h db -U postgres -d quizbank -tAc "SELECT count(*) FROM questions;" 2>/dev/null || echo 0)
+  if [ "$HAS_ROWS" -gt 0 ]; then
+    echo "📦 Existing data detected ($HAS_ROWS questions) — skipping restore/seed."
+    echo "   (Tip) To force full restore next time: FORCE_RESTORE=1 docker compose up"
+    exit 0
+  else
+    echo "📭 No user data found — continuing to restore or seed."
+  fi
+fi
+
+
 # --- CRITICAL: Initialize schema if tables don't exist ---
 echo "🔧 Checking if schema exists..."
 TABLE_EXISTS=$(psql -h db -U postgres -d quizbank -tAc "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'courses');")
@@ -69,10 +87,17 @@ backup_has_data() {
 # --- Decision: restore or seed ---
 RESTORE_IF_BACKUP="${RESTORE_IF_BACKUP:-0}"
 
-if [ "$RESTORE_IF_BACKUP" = "1" ] && backup_has_data "$LATEST_DUMP"; then
+if [ "$RESTORE_IF_BACKUP" = "1" ] && [ -s "$LATEST_DUMP" ]; then
   echo "📦 Backup found & non-empty — restoring…"
-  bash "$SCRIPTS/restore_db.sh"
-  
+
+  echo "🧨 Dropping and recreating quizbank database to ensure clean restore..."
+  psql -h db -U postgres -c "DROP DATABASE IF EXISTS quizbank;"
+  psql -h db -U postgres -c "CREATE DATABASE quizbank;"
+
+  echo "🧩 Restoring from $LATEST_DUMP ..."
+  zcat "$LATEST_DUMP" | psql -h db -U postgres -d quizbank
+  echo "✅ Database restore completed."
+
   echo "🗂 Restoring assets snapshot…"
   bash "$SCRIPTS/restore_assets.sh" || echo "⚠️ restore_assets.sh failed (continuing)"
   RAN_ACTION="restore"

@@ -551,6 +551,32 @@ def extract_attachments_from_zip(temp_dir: Path, zip_path: Path) -> Tuple[List[s
 # API ENDPOINTS
 # ============================================================================
 
+# API #8: Download Template ZIP
+@router.get("/download", tags=["Templates"])
+def download_template():
+    """
+    Download the standard quiz upload template as a ZIP file.
+    Contains:
+    - questions_template.csv
+    - context_template.csv
+    - README.txt with upload instructions
+    """
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.abspath(os.path.join(base_dir, "..", "..", ".."))
+    template_path = os.path.join(project_root, "app", "quizbank-db", "static", "templates", "quiz_upload_template.zip")
+
+    print("Resolved template path:", template_path)
+
+    if not os.path.exists(template_path):
+        raise HTTPException(status_code=404, detail=f"Template file not found at {template_path}")
+
+    return FileResponse(
+        path=template_path,
+        filename="quiz_upload_template.zip",
+        media_type="application/zip"
+    )
+
+
 # API #1: Filtered Questions Retrieval (unchanged)
 @router.get("/")
 async def get_questions(

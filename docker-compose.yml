@@ -63,6 +63,9 @@ services:
       # Database init scripts and data
       - ./backend/quizbank-db/db-init:/app/quizbank-db/db-init:ro
       - ./backend/quizbank-db/scripts:/app/quizbank-db/scripts
+      # Static files for templates (serves /download endpoint)
+      - ./backend/quizbank-db/static:/app/quizbank-db/static:ro
+
     depends_on:
       db:
         condition: service_healthy
