@@ -851,7 +851,9 @@ async def get_questions(
                 query_str += " AND (" + " OR ".join(conditions) + ")"
             else:
                 query_str += " AND " + " AND ".join(conditions)
-
+                
+        
+        query_str += " ORDER BY q.question_id ASC"
         base_results = db.execute(text(query_str), params).fetchall()
 
         # Apply topic-based filtering
