@@ -1,19 +1,9 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-} from "../components/card";
+import { Card, CardContent, CardHeader } from "../components/card";
 import { Button } from "../components/button";
 import { Badge } from "../components/badge";
-import {
-  ArrowLeft,
-  Eye,
-  Plus,
-  ShoppingBasket,
-  Edit,
-} from "lucide-react";
+import { ArrowLeft, Eye, Plus, ShoppingBasket, Edit } from "lucide-react";
 import EditQuestion from "./edit_question.jsx";
 
 export function QuestionDetails({
@@ -44,24 +34,39 @@ export function QuestionDetails({
     if (questionId) fetchQuestionData(questionId);
   }, [questionId]);
 
-  // --- Fetch similar questions ---
+  // --- Fetch similar questions (latest API #11 integrated) ---
   useEffect(() => {
     const fetchSimilarQuestions = async () => {
       setLoadingSimilar(true);
-      const res = await axios.get(
-        `http://localhost:5003/api/questions/${questionId}/suggestions?top_n=5`
-      );
-      const suggested = res.data.suggested_variants || [];
-      const details = await Promise.all(
-        suggested.map((s) =>
-          axios
-            .get(`http://localhost:5003/api/questions/${s.question_id}`)
-            .then((r) => ({ ...r.data.data, similarity: s.similarity }))
-        )
-      );
-      setSimilarQuestions(details);
-      setLoadingSimilar(false);
+      try {
+        const res = await axios.get(
+          `http://localhost:5003/api/questions/${questionId}/suggestions?top_n=5`
+        );
+
+        const suggested = res.data.suggested_variants || [];
+
+        const details = suggested.map((s) => ({
+          question_id: s.question_id,
+          question_text: s.question_text,
+          course_code: s.course_code,
+          question_type: s.question_type,
+          difficulty: s.difficulty,
+          concepts: s.concepts || [],
+          similarity_score: s.similarity_score,
+          is_latest: s.is_latest,
+          version_number: s.version_number,
+          previous_version_id: s.previous_version_id,
+        }));
+
+        setSimilarQuestions(details);
+      } catch (error) {
+        console.error("Error fetching similar questions:", error);
+        setSimilarQuestions([]);
+      } finally {
+        setLoadingSimilar(false);
+      }
     };
+
     if (questionId) fetchSimilarQuestions();
   }, [questionId]);
 
@@ -70,7 +75,9 @@ export function QuestionDetails({
     setLoadingVersions(true);
     try {
       const res = await axios.get(`http://localhost:5003/api/questions/${id}/versions`);
-      const sorted = (res.data.data || []).sort((a, b) => b.version_number - a.version_number);
+      const sorted = (res.data.data || []).sort(
+        (a, b) => b.version_number - a.version_number
+      );
       setVersions(sorted);
     } finally {
       setLoadingVersions(false);
@@ -141,9 +148,12 @@ export function QuestionDetails({
       {/* HEADER */}
       <header className="bg-white border-gray-200 shadow-sm">
         <div className="max-w-7xl mx-auto px-6 py-4">
-          {/* TOP ROW: Back + Cart */}
           <div className="flex items-center justify-between">
-            <Button variant="ghost" onClick={onBack} className="flex items-center space-x-2">
+            <Button
+              variant="ghost"
+              onClick={onBack}
+              className="flex items-center space-x-2"
+            >
               <ArrowLeft className="h-4 w-4" />
               <span>Back</span>
             </Button>
@@ -158,11 +168,9 @@ export function QuestionDetails({
             </Button>
           </div>
 
-
-          {/* BOTTOM ROW: Title */}
-          <h1 
-          className="text-center mt-4 text-xl font-semibold text-gray-800" 
-          style={{ fontWeight: "600"}}
+          <h1
+            className="text-center mt-4 text-xl font-semibold text-gray-800"
+            style={{ fontWeight: "600" }}
           >
             Question Details
           </h1>
@@ -172,35 +180,38 @@ export function QuestionDetails({
       {/* MAIN CONTENT */}
       <main className="max-w-3xl mx-auto px-6 py-10 space-y-10">
         {/* --- Concepts Section --- */}
-        {Array.isArray(questionData.concepts) && questionData.concepts.length > 0 && (
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "flex-start",
-              alignItems: "center",
-              flexWrap: "wrap",
-              gap: "8px",
-              fontSize: "14px",
-              color: "#000",
-            }}
-          >
-            <span style={{ fontWeight: "500", marginRight: "8px" }}>Concepts:</span>
-            {questionData.concepts.slice(0, 3).map((tag, idx) => (
-              <span
-                key={idx}
-                style={{
-                  backgroundColor: "#f0f0f0",
-                  borderRadius: "16px",
-                  padding: "6px 12px",
-                  fontSize: "14px",
-                  border: "1px solid #ddd",
-                }}
-              >
-                {tag.trim()}
+        {Array.isArray(questionData.concepts) &&
+          questionData.concepts.length > 0 && (
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-start",
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: "8px",
+                fontSize: "14px",
+                color: "#000",
+              }}
+            >
+              <span style={{ fontWeight: "500", marginRight: "8px" }}>
+                Concepts:
               </span>
-            ))}
-          </div>
-        )}
+              {questionData.concepts.slice(0, 3).map((tag, idx) => (
+                <span
+                  key={idx}
+                  style={{
+                    backgroundColor: "#f0f0f0",
+                    borderRadius: "16px",
+                    padding: "6px 12px",
+                    fontSize: "14px",
+                    border: "1px solid #ddd",
+                  }}
+                >
+                  {tag.trim()}
+                </span>
+              ))}
+            </div>
+          )}
 
         {/* --- Question Info --- */}
         <div className="bg-white p-6 rounded-lg shadow-sm border-gray-200">
@@ -210,13 +221,16 @@ export function QuestionDetails({
                 {questionData.course_code} – {questionData.course_name}
               </h1>
               <p className="capitalize pl-4">
-                Question: {questionData.question_id} | {questionData.question_type} |{" "}
-                {questionData.difficulty}
+                Question: {questionData.question_id} |{" "}
+                {questionData.question_type} | {questionData.difficulty}
               </p>
             </div>
-
             <div className="flex space-x-2">
-              <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsEditing(true)}
+              >
                 <Edit className="h-4 w-4 mr-1" /> Edit
               </Button>
               <Button
@@ -232,12 +246,12 @@ export function QuestionDetails({
 
           {/* --- Question Box --- */}
           <div className="mb-6">
-            <p className="text-gray-800 text-base leading-relaxed mb-4" >
+            <p className="text-gray-800 text-base leading-relaxed mb-4">
               {questionData.question_text}
             </p>
 
             {questionData.options && (
-              <ul className="space-y-2 mb-4" >
+              <ul className="space-y-2 mb-4">
                 {Object.entries(questionData.options).map(([key, value]) => (
                   <li key={key} className="flex items-start space-x-2">
                     <span className="font-semibold">{key}.</span>
@@ -253,7 +267,7 @@ export function QuestionDetails({
 
           {/* --- Explanation Box --- */}
           {questionData.explanation && (
-            <div className="mb-6" >
+            <div className="mb-6">
               <strong>Explanation:</strong> {questionData.explanation}
             </div>
           )}
@@ -261,7 +275,9 @@ export function QuestionDetails({
 
         {/* --- Version History --- */}
         <section className="max-w-3xl mx-auto w-full">
-          <h2 className="text-lg font-semibold mb-4 text-gray-800">Change History</h2>
+          <h2 className="text-lg font-semibold mb-4 text-gray-800">
+            Change History
+          </h2>
           {loadingVersions ? (
             <p className="text-gray-500">Loading...</p>
           ) : versions.length === 0 ? (
@@ -275,16 +291,23 @@ export function QuestionDetails({
                   <Card
                     key={v.question_id}
                     className={`shadow-sm transition-all ${
-                      v.is_latest ? "bg-gray-100 text-gray-600" : "hover:shadow-md"
+                      v.is_latest
+                        ? "bg-gray-100 text-gray-600"
+                        : "hover:shadow-md"
                     }`}
-                    style={{borderRadius: '16px', overflow: 'hidden'}}
+                    style={{ borderRadius: "16px", overflow: "hidden" }}
                   >
-                    <CardHeader className="pb-1" style={{paddingLeft: '20px'}}>
+                    <CardHeader
+                      className="pb-1"
+                      style={{ paddingLeft: "20px" }}
+                    >
                       <div className="flex justify-between items-center">
                         <h3 className="text-sm font-semibold">
                           Version {v.version_number}{" "}
                           {v.is_latest && (
-                            <span className="text-gray-500 text-xs">(Latest)</span>
+                            <span className="text-gray-500 text-xs">
+                              (Latest)
+                            </span>
                           )}
                         </h3>
                         <Button
@@ -297,21 +320,23 @@ export function QuestionDetails({
                         </Button>
                       </div>
                     </CardHeader>
-                    <CardContent className="text-sm space-y-2" style={{paddingLeft: '20px'}}>
+                    <CardContent
+                      className="text-sm space-y-2"
+                      style={{ paddingLeft: "20px" }}
+                    >
                       <p className="text-gray-800 line-clamp-2">
                         {v.question_text || "No text available"}
                       </p>
                       <div className="text-gray-600 space-y-1">
                         <p>
-                          <span>Course:</span> {v.course_code} | <span>Type:</span> {v.question_type} |{" "}
-                          <span>Difficulty:</span>{" "}
+                          <span>Course:</span> {v.course_code} | <span>Type:</span>{" "}
+                          {v.question_type} | <span>Difficulty:</span>{" "}
                           {v.difficulty
                             ? v.difficulty.charAt(0).toUpperCase() +
                               v.difficulty.slice(1).toLowerCase()
                             : "—"}
                         </p>
                       </div>
-                      {/* Bottom timestamp */}
                       <p className="text-xs text-gray-300 mt-4">
                         Updated {new Date(v.created_at).toLocaleString()}
                       </p>
@@ -324,27 +349,23 @@ export function QuestionDetails({
 
         {/* --- Similar Questions --- */}
         <section className="max-w-3xl mx-auto w-full">
-          <h2 className="text-lg font-semibold mb-4 text-gray-800">Similar Questions</h2>
+          <h2 className="text-lg font-semibold mb-4 text-gray-800">
+            Similar Questions
+          </h2>
           {loadingSimilar ? (
             <p className="text-gray-500">Loading...</p>
           ) : similarQuestions.length === 0 ? (
             <p className="text-gray-500">No similar questions found.</p>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: '32px' }}>
+            <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "32px" }}>
               {similarQuestions.map((q) => (
                 <Card
                   key={q.question_id}
                   className="shadow-sm hover:shadow-md transition"
-                  style={{ borderRadius: '16px', overflow: 'hidden' }}
+                  style={{ borderRadius: "16px", overflow: "hidden" }}
                 >
-                  {/* ADJUSTED: Increased Top Padding on CardContent and removed left padding */}
-                  <CardContent className="p-4 space-y-2" style={{ paddingTop: '20px', paddingBottom: '16px' }}>
-                    
-                    {/* START: Combined Concept and Match Line */}
-                    <div
-                      className="flex justify-between items-start"
-                    >
-                      {/* Concepts (Left side) */}
+                  <CardContent className="p-4 space-y-2" style={{ paddingTop: "20px" }}>
+                    <div className="flex justify-between items-start">
                       {Array.isArray(q.concepts) && q.concepts.length > 0 && (
                         <div
                           style={{
@@ -355,9 +376,8 @@ export function QuestionDetails({
                             gap: "8px",
                             fontSize: "14px",
                             color: "#000",
-                            maxWidth: '80%',
-                            marginLeft: '4px', // Tweak: Moves concepts slightly left
-
+                            maxWidth: "80%",
+                            marginLeft: "4px",
                           }}
                         >
                           {q.concepts.slice(0, 3).map((tag, idx) => (
@@ -376,25 +396,29 @@ export function QuestionDetails({
                           ))}
                         </div>
                       )}
-                      {/* % Match (Right side) */}
-                      <span className="text-sm font-medium text-gray-700 italic" style={{ marginRight: '4px'}}>
-                        {Math.round(q.similarity * 100)}% match
+                      <span
+                        className="text-sm font-medium text-gray-700 italic"
+                        style={{ marginRight: "4px" }}
+                      >
+                        {Math.round(q.similarity_score * 100)}% match
                       </span>
                     </div>
-                    {/* END: Combined Concept and Match Line */}
 
-                    {/* Question text and details - Added a top margin to separate from the line above */}
-                    <p className="font-medium text-gray-900 line-clamp-2" style={{ marginTop: '12px', marginLeft: '6px'}}>
+                    <p
+                      className="font-medium text-gray-900 line-clamp-2"
+                      style={{ marginTop: "12px", marginLeft: "6px" }}
+                    >
                       {q.question_text}
                     </p>
-                    <p className="text-sm text-gray-500" style={{ marginLeft: '6px'}}>
-                      <span>Course:</span> {q.course_code} | <span>Type:</span> {q.question_type} |{" "}
-                      <span>Difficulty:</span>{" "}
+                    <p className="text-sm text-gray-500" style={{ marginLeft: "6px" }}>
+                      <span>Course:</span> {q.course_code} | <span>Type:</span>{" "}
+                      {q.question_type} | <span>Difficulty:</span>{" "}
                       {q.difficulty
                         ? q.difficulty.charAt(0).toUpperCase() +
                           q.difficulty.slice(1).toLowerCase()
                         : "—"}
                     </p>
+
                     <div className="flex space-x-2 pt-2">
                       <Button
                         variant="outline"
@@ -402,7 +426,7 @@ export function QuestionDetails({
                         onClick={() => handleViewDetails(q.question_id)}
                         className="flex-1"
                       >
-                        <Eye className="h-4 w-4 mr-1" /> View
+                        View Details
                       </Button>
                       <Button
                         size="sm"
@@ -420,8 +444,6 @@ export function QuestionDetails({
             </div>
           )}
         </section>
-
-
       </main>
     </div>
   );
