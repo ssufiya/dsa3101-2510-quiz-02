@@ -2053,7 +2053,7 @@ async def confirm_upload(request: ConfirmUploadRequest, db: Session = Depends(ge
     
     try:        
         # STEP 1: Parse data and get course/assessment
-        logger.info("📊 Step 2: Parsing CSVs and getting course/assessment...")
+        logger.info("📊 Step 1: Parsing CSVs and getting course/assessment...")
         questions_data = upload_data['questions_data']
         contexts_data = upload_data['contexts_data']
         attachments = upload_data['attachments']
