@@ -1,7 +1,7 @@
 """
 API routes for Questions - Updated with Enhanced Upload & Attachment Support
 """
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Body
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Body, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import text 
 from typing import Optional, List, Dict, Any, Tuple
@@ -28,6 +28,7 @@ import unicodedata
 import subprocess
 import mimetypes
 
+
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -48,13 +49,6 @@ BACKUP_DIR.mkdir(parents=True, exist_ok=True)
 
 # Create router
 router = APIRouter()
-
-# Import DB connection
-try:
-    from app.db.connection import SessionLocal
-except ImportError:
-    logger.warning("Could not import SessionLocal - DB operations will fail")
-    SessionLocal = None
 
 # Filename parsing regex
 FNAME_RE = re.compile(
@@ -81,8 +75,7 @@ OTHER_EXTENSIONS = {'.html', '.css', '.js', '.tex'}
 
 
 def get_storage_path_for_file(filename: str) -> Path:
-    return STORAGE_PATH
-
+    return ATT_STORAGE_PATH / filename
 
 def is_image_file(filename: str) -> bool:
     """Check if file is an image"""
@@ -104,7 +97,9 @@ def get_mime_type(filename: str) -> str:
         '.py': 'text/x-python',
         '.ipynb': 'application/x-ipynb+json',
         '.md': 'text/markdown',
-        '.tex': 'application/x-latex'
+        '.tex': 'application/x-latex',
+        '.csv': 'text/csv',
+        '.zip': 'application/zip',
     }
     return mime_map.get(ext, 'application/octet-stream')
 
@@ -241,11 +236,34 @@ def restore_from_backup(backup_file: Path) -> bool:
     except Exception as e:
         logger.error(f"❌ Restore failed: {e}")
         return False
+    
 
-def copy_attachments_to_storage(attachment_paths: Dict[str, str]) -> int:
+def is_question_file(filename:str) -> bool:
+    """ check if the file is a _questions.csv file """ 
+    filename_lower = filename.lower()
+    return filename_lower.endswith('_questions.csv') or filename_lower == 'questions.csv'
+
+def is_context_file(filename:str) -> bool:
+    """ check if the file is a c_ontext.csv file """ 
+    filename_lower = filename.lower()
+    return filename_lower.endswith('_context.csv') or filename_lower == 'context.csv'
+
+def is_metadata_file(filename: str) -> bool:
+    """
+    Check if file is a metadata file (questions.csv, context.csv, or parent ZIP).
+    These should NOT be copied to attachment storage.
+    """
+    if is_question_file(filename) or is_context_file(filename):
+        return True   
+    return False
+
+
+def copy_attachments_to_storage(attachment_paths: Dict[str, str], 
+    assessment_id: int, 
+    original_id: int = None, 
+    version_number: int = None) -> int:
     """Copy attachments from temp directory to persistent storage. Keeps images and R files."""
     copied_count = 0
-    skip_exts = {'.csv', '.zip'}
     
     for att_name, att_path in attachment_paths.items():
         try:
@@ -254,18 +272,21 @@ def copy_attachments_to_storage(attachment_paths: Dict[str, str]) -> int:
                 logger.warning(f"⚠️ Attachment not found: {att_name}")
                 continue
             
-            # Get file extension
-            file_ext = source.suffix.lower()
-            
-            # Keep images and R files, skip others (CSV, ZIP, etc.)
-            if file_ext in skip_exts:
-                logger.info(f"⏭️ Skipping CSV/ZIP file: {att_name} ({file_ext})")
+            # Exclude questions/context CSVs and parent ZIPs
+            if is_metadata_file(att_name):
+                logger.info(f"⏭️ Skipping metadata file: {att_name}")
                 continue
             
+            if original_id is not None and version_number is not None:
+                new_name = f"{assessment_id}_{original_id}_{version_number}_{att_name}"
+            else:
+                # Standard naming for new uploads
+                new_name = f"{assessment_id}_{att_name}"
+            
             # All files go to attachment_storage
-            target_path = ATT_STORAGE_PATH / att_name
+            target_path = get_storage_path_for_file(new_name)
             shutil.copy2(source, target_path)
-            logger.info(f"✅ Copied attachment: {att_name} → {target_path}")
+            logger.info(f"✅ Copied attachment: {att_name} → {new_name} into {target_path}")
             copied_count += 1
         except Exception as e:
             logger.error(f"❌ Failed to copy attachment {att_name}: {e}")
@@ -333,14 +354,14 @@ def parse_meta_from_filename(pathlike) -> Optional[Tuple[str, str, str, Optional
     return (course, title, norm_kind, ay, sem)
 
 
-def check_for_duplicates(session, assessment_id: int, questions_data: list) -> tuple[bool, list]:
+def check_for_duplicates(session, assessment_id: int, questions_data: list) -> tuple[bool, dict]:
     """
     Check if any questions already exist in the database.
     
     Returns:
         (has_duplicates: bool, duplicate_list: list of dicts with duplicate info)
     """
-    duplicates = []
+    duplicate_map = {}
     
     for idx, q in enumerate(questions_data):
         qtext = (G(q, "Question Text", "question_text") or "").strip()
@@ -360,82 +381,30 @@ def check_for_duplicates(session, assessment_id: int, questions_data: list) -> t
         ).fetchone()
 
         if existing:
-            qnum = (G(q, "Question Number", "question_number") or "").strip()
-            duplicates.append({
-                "row_number": idx + 1,
-                "question_number": qnum if qnum else "N/A",
-                "question_text": qtext[:100] + "..." if len(qtext) > 100 else qtext,
-                "existing_question_id": existing.question_id,
-                "existing_version": existing.version_number
-            })
+            duplicate_map[idx] = {
+                "question_id": existing.question_id,
+                "version_number": existing.version_number,
+                "question_text": qtext
+            }
     
-    return len(duplicates) > 0, duplicates
+    return len(duplicate_map) > 0, duplicate_map
 
+def validate_positive_int(value: str, name: str) -> int:
+    # check if id is positive integer
+    try: 
+        int_val = int(value)
+        if int_val <= 0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid '{name}' '{value}'. Only positive integers are allowed."
+            )
+        return int_val
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid '{name}' '{value}'. Only positive integers are allowed."
+        )
 
-# Pydantic models
-class QuestionPreview(BaseModel):
-    question_number: Optional[int] = None
-    sub_question_number: Optional[int] = None
-    question_text: str
-    question_type: Optional[str] = None
-    option_a: Optional[str] = None
-    option_b: Optional[str] = None
-    option_c: Optional[str] = None
-    option_d: Optional[str] = None
-    option_e: Optional[str] = None
-    correct_answer: Optional[str] = None
-    explanation: Optional[str] = None
-    points: Optional[float] = None
-    difficulty: Optional[str] = None
-    concepts: Optional[str] = None
-    attachment: Optional[str] = None
-    context_id: Optional[str] = None
-
-class ContextPreview(BaseModel):
-    context_id: str
-    context_text: str
-    attachment: Optional[str] = None
-
-class AttachmentInfo(BaseModel):
-    name: str
-    type: str  # 'image', 'document', 'data', 'other'
-    size: Optional[int] = None
-
-class UploadPreviewResponse(BaseModel):
-    upload_id: str
-    questions: List[QuestionPreview]
-    contexts: List[ContextPreview]
-    attachments: List[AttachmentInfo]
-    course_code: Optional[str] = None
-    assessment_type: Optional[str] = None
-    academic_year: Optional[str] = None
-    semester: Optional[str] = None
-    debug_info: Optional[Dict] = None
-
-class ConfirmUploadRequest(BaseModel):
-    upload_id: str
-
-class ConfirmUploadResponse(BaseModel):
-    success: bool
-    message: str
-    upload_id: str
-    questions_inserted: int
-    contexts_inserted: int
-    attachments_copied: int
-    backup_created: bool
-
-class CancelUploadRequest(BaseModel):
-    upload_id: str
-
-class CancelUploadResponse(BaseModel):
-    success: bool
-    message: str
-    upload_id: str
-
-# Temporary storage for pending uploads
-pending_uploads: Dict[str, Dict] = {}
-
-# Validation helpers
 def validate_questions_data(rows: List[dict], is_edit: bool = False) -> Tuple[bool, Optional[str]]:
     """Validate questions - for edits, exactly 1 row required"""
     if not rows:
@@ -506,6 +475,8 @@ def categorize_attachment(filename: str, file_path: Optional[Path] = None) -> Di
         att_type = 'document'
     elif ext in DATA_EXTENSIONS:
         att_type = 'data'
+    elif ext in ARCHIVE_EXTENSIONS: 
+        att_type = 'archive'
     else:
         att_type = 'other'
     
@@ -522,7 +493,7 @@ def categorize_attachment(filename: str, file_path: Optional[Path] = None) -> Di
     
     return result
 
-def extract_attachments_from_zip(temp_dir: Path, zip_path: Path) -> Tuple[List[str], Dict[str, str], List[AttachmentInfo]]:
+def extract_attachments_from_zip(temp_dir: Path, zip_path: Path, parent_zip_name: str = None) -> Tuple[List[str], Dict[str, str], List['AttachmentInfo']]:
     """Extract and categorize attachments from ZIP"""
     attachments = []
     attachment_paths = {}
@@ -532,26 +503,183 @@ def extract_attachments_from_zip(temp_dir: Path, zip_path: Path) -> Tuple[List[s
         zip_ref.extractall(temp_dir)
     
     for f in temp_dir.rglob('*'):
-        # Skip CSV files, ZIP files, and hidden/system files
-        if f.is_file() and f.suffix.lower() not in {'.csv', '.zip'}:
-            if '__MACOSX' not in str(f) and not f.name.startswith('.'):
-                attachments.append(f.name)
-                attachment_paths[f.name] = str(f)
-                
-                # Categorize attachment
-                att_info = categorize_attachment(f.name, f)
-                attachment_info.append(AttachmentInfo(**att_info))
-                
-                logger.info(f"📎 Found {att_info['type']} attachment: {f.name} ({att_info.get('size', 0)} bytes)")
+        # Only process files (skip directories and hidden/system files)
+        if not f.is_file():
+            continue
+        
+        if '__MACOSX' in str(f) or f.name.startswith('.'):
+            continue
+        # Skip parent zip file 
+        if parent_zip_name and f.name == parent_zip_name:
+            logger.info(f"⏭️ Skipping parent ZIP: {f.name}")
+            continue
+
+        # Skip metadata files (questions/context CSVs and parent ZIPs)
+        if is_metadata_file(f.name):
+            logger.info(f"⏭️ Skipping metadata file during extraction: {f.name}")
+            continue
+        
+        # Add all other files (including attachment CSVs and ZIPs)
+        attachments.append(f.name)
+        attachment_paths[f.name] = str(f)
+        
+        # Categorize attachment
+        att_info = categorize_attachment(f.name, f)
+        attachment_info.append(AttachmentInfo(**att_info))
+        
+        logger.info(f"📎 Found {att_info['type']} attachment: {f.name} ({att_info.get('size', 0)} bytes)")
     
     return attachments, attachment_paths, attachment_info
 
+
+def highlight_changes(old_text: str, new_text: str) -> Dict[str, str]:
+    """Generate inline highlighted HTML showing additions and deletions"""
+    if old_text == new_text:
+        return None
+    
+    similarity = SequenceMatcher(None, old_text, new_text).ratio()
+    if similarity < 0.3:
+        return {
+            "previous": f'<span style="background-color: #ffc0c0; text-decoration: line-through;">{old_text}</span>' if old_text else "",
+            "current": f'<span style="background-color: #c0ffc0; font-weight: bold;">{new_text}</span>' if new_text else "",
+            "type": "complete_change"
+        }
+    
+    old_words = old_text.split()
+    new_words = new_text.split()
+    s = SequenceMatcher(None, old_words, new_words)
+    old_html = []
+    new_html = []
+    
+    for tag, i1, i2, j1, j2 in s.get_opcodes():
+        old_chunk = ' '.join(old_words[i1:i2])
+        new_chunk = ' '.join(new_words[j1:j2])
+        
+        if tag == 'equal':
+            old_html.append(old_chunk)
+            new_html.append(new_chunk)
+        elif tag == 'delete':
+            old_html.append(f'<span style="background-color: #ffc0c0; text-decoration: line-through;">{old_chunk}</span>')
+        elif tag == 'insert':
+            new_html.append(f'<span style="background-color: #c0ffc0; font-weight: bold;">{new_chunk}</span>')
+        elif tag == 'replace':
+            old_html.append(f'<span style="background-color: #ffc0c0; text-decoration: line-through;">{old_chunk}</span>')
+            new_html.append(f'<span style="background-color: #c0ffc0; font-weight: bold;">{new_chunk}</span>')
+        
+        if tag != 'equal' and i2 < len(old_words):
+            old_html.append(' ')
+        if tag != 'equal' and j2 < len(new_words):
+            new_html.append(' ')
+    
+    return {"previous": ''.join(old_html), "current": ''.join(new_html), "type": "partial_change"}
+
+# Pydantic models
+class QuestionPreview(BaseModel):
+    question_number: Optional[int] = None
+    sub_question_number: Optional[int] = None
+    question_text: str
+    question_type: Optional[str] = None
+    option_a: Optional[str] = None
+    option_b: Optional[str] = None
+    option_c: Optional[str] = None
+    option_d: Optional[str] = None
+    option_e: Optional[str] = None
+    correct_answer: Optional[str] = None
+    explanation: Optional[str] = None
+    points: Optional[float] = None
+    difficulty: Optional[str] = None
+    concepts: Optional[str] = None
+    attachment: Optional[str] = None
+    context_id: Optional[str] = None
+    is_duplicate: bool = False 
+    duplicate_of: Optional[int] = None 
+    duplicate_version: Optional[int] = None 
+
+
+class ContextPreview(BaseModel):
+    context_id: str
+    context_text: str
+    attachment: Optional[str] = None
+
+class AttachmentInfo(BaseModel):
+    name: str
+    type: str  # 'image', 'document', 'data', 'other'
+    size: Optional[int] = None
+
+class UploadPreviewResponse(BaseModel):
+    error_message: Optional[str] = None
+    upload_id: Optional[str] = None
+    questions: List[QuestionPreview]
+    contexts: List[ContextPreview]
+    attachments: List[AttachmentInfo]
+    course_code: Optional[str] = None
+    assessment_type: Optional[str] = None
+    academic_year: Optional[str] = None
+    semester: Optional[str] = None
+    has_duplications: bool = False
+    duplicate_count: int = 0
+    debug_info: Optional[Dict] = None
+
+class ConfirmUploadRequest(BaseModel):
+    upload_id: str
+
+class ConfirmUploadResponse(BaseModel):
+    success: bool
+    message: str
+    upload_id: str
+    questions_inserted: int
+    contexts_inserted: int
+    attachments_copied: int
+    backup_created: bool
+
+class CancelUploadRequest(BaseModel):
+    upload_id: str
+
+class CancelUploadResponse(BaseModel):
+    success: bool
+    message: str
+    upload_id: str
+
+# Temporary storage for pending uploads
+pending_uploads: Dict[str, Dict] = {}
 
 # ============================================================================
 # API ENDPOINTS
 # ============================================================================
 
-# API #8: Download Template ZIP
+# API for serving attachments
+@router.get("/attachments/{filename}")
+async def get_attachment(filename: str):
+    """Serve attachment files with proper MIME types"""
+    try:
+        # First look in storage
+        file_path = get_storage_path_for_file(filename)
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail=f"Attachment '{filename}' not found")
+
+        # Detect MIME type
+        mime_type = get_mime_type(filename)
+
+        # Return as inline for images, as download for others
+        content_disposition = (
+            f"inline; filename={filename}"
+            if is_image_file(filename)
+            else f"attachment; filename={filename}"
+        )
+
+        return FileResponse(
+            path=file_path,
+            media_type=mime_type,
+            headers={"Content-Disposition": content_disposition},
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error serving attachment: {str(e)}")
+    
+    
+# API #1: Download Template ZIP
 @router.get("/download", tags=["Templates"])
 def download_template():
     """
@@ -577,7 +705,8 @@ def download_template():
     )
 
 
-# API #1: Filtered Questions Retrieval (unchanged)
+
+# API #2: Filtered Questions Retrieval
 @router.get("/")
 async def get_questions(
     id: Optional[str] = Query(None, description="Filter by question ID"),
@@ -620,6 +749,9 @@ async def get_questions(
         # ID filtering
         if id is not None:
             ids = [i.strip() for i in id.split(",") if i.strip()]
+            valid_ids = []
+            for question_id in ids:
+                validate_positive_int(question_id, "question ID")
             if len(ids) == 1:
                 conditions.append("q.question_id = :id")
                 params["id"] = ids[0]
@@ -659,6 +791,7 @@ async def get_questions(
                     params[key] = f"%{d}%"
                 conditions.append("(" + " OR ".join(subconds) + ")")
 
+        # Question type filtering
         if type is not None:
             types = [t.strip() for t in type.split(",") if t.strip()]
             if len(types) == 1:
@@ -672,21 +805,31 @@ async def get_questions(
                     params[key] = f"%{t}%"
                 conditions.append("(" + " OR ".join(subconds) + ")")
 
+        # Semester filtering (only accepts 1 or 2)
         if semester is not None:
             semesters = [s.strip() for s in semester.split(",") if s.strip()]
-            if len(semesters) == 1:
-                conditions.append("(a.assessment_semester ILIKE :semester OR a.assessment_type ILIKE :semester)")
-                params["semester"] = f"%{semesters[0]}%"
-            else:
-                subconds = []
-                for i, s in enumerate(semesters):
-                    key = f"semester_{i}"
-                    subconds.append(f"(a.assessment_semester ILIKE :{key} OR a.assessment_type ILIKE :{key})")
-                    params[key] = f"%{s}%"
-                conditions.append("(" + " OR ".join(subconds) + ")")
-
-        if is_latest and match == "all":
-            conditions.append("q.is_latest = TRUE")
+            # Validate semester values
+            valid_semesters = []
+            for sem in semesters:
+                if sem in ["1", "2"]:
+                    valid_semesters.append(sem)
+                else:
+                    raise HTTPException(
+                        status_code=400, 
+                        detail=f"Invalid semester value '{sem}'. Only '1' or '2' are allowed."
+                    )
+            
+            if valid_semesters:
+                if len(valid_semesters) == 1:
+                    conditions.append("a.assessment_semester = :semester")
+                    params["semester"] = valid_semesters[0]
+                else:
+                    subconds = []
+                    for i, sem in enumerate(valid_semesters):
+                        key = f"semester_{i}"
+                        subconds.append(f"a.assessment_semester = :{key}")
+                        params[key] = sem
+                    conditions.append("(" + " OR ".join(subconds) + ")")
 
         if conditions:
             if match == "any" and len(conditions) > 1:
@@ -716,9 +859,13 @@ async def get_questions(
                     filtered_rows.append(row)
         else:
             filtered_rows = base_results
-
-        if is_latest and match == "any":
+        
+        if is_latest:
+            # Show only LATEST versions (is_latest = True)
             filtered_rows = [row for row in filtered_rows if row.is_latest]
+        else:
+            # Show ALL versions (no filtering)
+            pass
 
         questions = []
         for row in filtered_rows:
@@ -740,19 +887,19 @@ async def get_questions(
             })
 
         return {"success": True, "count": len(questions), "data": questions}
-
+    
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
-# API #2: More Questions Details with Enhanced Attachment Info
-from fastapi import Request, HTTPException, Depends
-from fastapi.responses import FileResponse
-from sqlalchemy import text
-from sqlalchemy.orm import Session
-
+# API #3: More Questions Details
 @router.get("/{id}")
-async def get_question_by_id(id: int, request: Request, db: Session = Depends(get_db)):
+async def get_question_by_id(id: str, request: Request, db: Session = Depends(get_db)):
     """GET /api/questions/:id - Returns full question with enhanced attachment metadata"""
+    # check if id is positive integer
+    validate_positive_int(id, "question ID")
+    
     try:
         query = text("""
             SELECT 
@@ -799,6 +946,7 @@ async def get_question_by_id(id: int, request: Request, db: Session = Depends(ge
             "assessment_type": row.assessment_type,
             "assessment_year": row.assessment_acadyear,
             "assessment_semester": row.assessment_semester,
+            "created_by": row.created_by,
             "created_at": row.created_at.isoformat() if row.created_at else None,
             "version_number": row.version_number,
             "previous_version_id": row.previous_version_id,
@@ -854,7 +1002,7 @@ async def get_question_by_id(id: int, request: Request, db: Session = Depends(ge
                 if not name:
                     continue
                 att_info = categorize_attachment(name)
-                url = ATT_STORAGE_PATH/name
+                url = get_storage_path_for_file(name)
                 question_files.append({
                     "name": name,
                     "url": request.url_for("get_attachment", filename=name),
@@ -873,41 +1021,12 @@ async def get_question_by_id(id: int, request: Request, db: Session = Depends(ge
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 
-# API for serving attachments
-@router.get("/attachments/{filename}")
-async def get_attachment(filename: str):
-    """Serve attachment files with proper MIME types"""
-    try:
-        # First look in storage
-        file_path = ATT_STORAGE_PATH / filename
-        if not file_path.exists():
-            raise HTTPException(status_code=404, detail=f"Attachment '{filename}' not found")
-
-        # Detect MIME type
-        mime_type = get_mime_type(filename)
-
-        # Return as inline for images, as download for others
-        content_disposition = (
-            f"inline; filename={filename}"
-            if is_image_file(filename)
-            else f"attachment; filename={filename}"
-        )
-
-        return FileResponse(
-            path=file_path,
-            media_type=mime_type,
-            headers={"Content-Disposition": content_disposition},
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error serving attachment: {str(e)}")
-
-# API #3: Fetching ALL Versions (unchanged)
+# API #4: Fetching ALL Versions
 @router.get("/{id}/versions")
-async def get_question_versions(id: int, db: Session = Depends(get_db)):
+async def get_question_versions(id: str, db: Session = Depends(get_db)):
     """GET /api/questions/{id}/versions - Retrieve all related versions"""
+    validate_positive_int(id, "question ID")
+    
     try:
         root_query = text("SELECT question_id, previous_version_id FROM questions WHERE question_id = :id")
         result = db.execute(root_query, {"id": id})
@@ -941,7 +1060,7 @@ async def get_question_versions(id: int, db: Session = Depends(get_db)):
             )
             SELECT
                 vt.question_id, vt.question_text, vt.question_type, vt.version_number,
-                vt.previous_version_id, vt.is_latest, vt.difficulty, vt.concepts, vt.created_at,
+                vt.previous_version_id, vt.is_latest, vt.difficulty, vt.concepts, vt.created_by, vt.created_at, 
                 c.course_code, c.course_name, a.assessment_type, a.assessment_acadyear, a.assessment_semester
             FROM version_tree vt
             LEFT JOIN assessments a ON vt.assessment_id = a.assessment_id
@@ -968,6 +1087,7 @@ async def get_question_versions(id: int, db: Session = Depends(get_db)):
                 "assessment_semester": row.assessment_semester or "",
                 "difficulty": row.difficulty or "",
                 "concepts": row.concepts.split(',') if row.concepts else [],
+                "created_by": row.created_by,
                 "created_at": row.created_at.isoformat() if row.created_at else None,
                 "version_number": row.version_number,
                 "previous_version_id": row.previous_version_id,
@@ -982,20 +1102,21 @@ async def get_question_versions(id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 
-# ============================================================================
-# API #4: Edit Upload
-# ============================================================================
-
+# API #5: Upload variant
 @router.post("/edit", response_model=UploadPreviewResponse)
 async def edit_upload(id: int, file: UploadFile = File(...), db: Session = Depends(get_db)):
     """
-    API #4: Upload a new version of a question.
+    API #5: Upload a new version of a question.
     Step 1: Upload CSV/ZIP, extract metadata from existing question, return preview.
-    """
-    upload_id = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    temp_dir = Path(tempfile.mkdtemp(prefix=f"edit_{upload_id}_"))
     
-    logger.info(f"=== Starting edit upload {upload_id} for question {id} ===")
+    Metadata inheritance logic:
+    - No filename structure → Inherit all metadata from parent question
+    - Partial filename (COURSE_SemX_AYAY) → Use provided metadata, inherit missing parts from parent
+    """
+    temp_upload_id = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    temp_dir = Path(tempfile.mkdtemp(prefix=f"edit_{temp_upload_id}_"))
+    
+    logger.info(f"=== Starting edit upload {temp_upload_id} for question {id} ===")
 
     try:
         file_path = temp_dir / file.filename
@@ -1009,47 +1130,52 @@ async def edit_upload(id: int, file: UploadFile = File(...), db: Session = Depen
         attachment_info = []
         questions_data = []
         contexts_data = []
+        metadata = {}
+        parent_zip_name = None
 
         # --- Handle ZIP files ---
         if file.filename.endswith(".zip"):
             logger.info(f"📦 Processing ZIP file: {file.filename}")
-            attachments, attachment_paths, attachment_info = extract_attachments_from_zip(temp_dir, file_path)
+            parent_zip_name = file.filename
+            attachments, attachment_paths, attachment_info = extract_attachments_from_zip(temp_dir, file_path, parent_zip_name)
 
             # Find CSVs inside ZIP
             for csv_file in temp_dir.rglob("*.csv"):
-                name_lower = csv_file.name.lower()
 
                 # Skip hidden/macOS files
                 if "__macosx" in str(csv_file).lower() or csv_file.name.startswith("."):
                     continue
 
                 # Context CSV detection
-                if "context" in name_lower and "question" not in name_lower:
+                if is_context_file(csv_file.name):
                     context_csv_path = csv_file
                     logger.info(f"✅ Found context CSV: {csv_file.name}")
                     continue
 
                 # Questions CSV detection
-                if "question" in name_lower:
+                if is_question_file(csv_file.name):
                     questions_csv_path = csv_file
                     logger.info(f"✅ Found questions CSV: {csv_file.name}")
                     continue
 
             if not questions_csv_path:
+                shutil.rmtree(temp_dir, ignore_errors=True)
                 raise HTTPException(status_code=400, detail="No question CSV found in ZIP")
 
         # --- Handle single CSV uploads ---
         elif file.filename.endswith(".csv"):
             questions_csv_path = file_path
         else:
+            shutil.rmtree(temp_dir, ignore_errors=True)
             raise HTTPException(status_code=400, detail="Only .zip or .csv files are supported")
 
         # --- Read questions CSV ---
         questions_data = read_csv_rows(questions_csv_path)
         logger.info(f"📊 Read {len(questions_data)} rows from questions CSV")
 
-        # Enforce exactly 1 question for API #4
+        # Enforce exactly 1 question 
         if len(questions_data) != 1:
+            shutil.rmtree(temp_dir, ignore_errors=True)
             raise HTTPException(
                 status_code=400,
                 detail=f"Questions CSV must contain exactly 1 question, found {len(questions_data)}"
@@ -1060,28 +1186,107 @@ async def edit_upload(id: int, file: UploadFile = File(...), db: Session = Depen
             contexts_data = read_csv_rows(context_csv_path)
             logger.info(f"📘 Read {len(contexts_data)} rows from context CSV")
 
-        # --- Extract contexts from questions CSV if no separate context CSV ---
-        elif not context_csv_path:
-            logger.info("📝 No separate context CSV found, extracting from questions CSV")
-            contexts_data = []
-            seen_contexts = set()
-            for q in questions_data:
-                ctx_id = (G(q, "Context ID", "context_id", "contextid") or "").strip()
-                ctx_text = (G(q, "Context Text", "context_text") or "").strip()
-                ctx_att = (G(q, "Context Attachment", "context_attachment") or "").strip()
 
-                if ctx_id and ctx_text and ctx_id not in seen_contexts:
-                    contexts_data.append({
-                        "Context ID": ctx_id,
-                        "Context Text": ctx_text,
-                        "Attachment": ctx_att
-                    })
-                    seen_contexts.add(ctx_id)
-                    logger.info(f"📄 Extracted context {ctx_id} from questions CSV")
-
-        # --- Build question previews ---
+        # --- Get metadata from parent question ---
+        logger.info(f"📋 Extracting metadata from question ID {id}")
+        existing_q = db.execute(
+            text("""
+                SELECT c.course_code, a.assessment_type, a.assessment_acadyear, a.assessment_semester, a.assessment_id, q.original_id, q.question_id
+                FROM questions q
+                JOIN assessments a ON q.assessment_id = a.assessment_id
+                JOIN courses c ON a.course_id = c.course_id
+                WHERE q.question_id = :qid
+            """),
+            {"qid": id}
+        ).fetchone()
+        
+        if not existing_q:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            raise HTTPException(status_code=404, detail=f"Question {id} not found")
+        
+        parent_metadata = {
+            'course_code': existing_q.course_code,
+            'assessment_type': existing_q.assessment_type,
+            'academic_year': existing_q.assessment_acadyear,
+            'semester': existing_q.assessment_semester,
+            'assessment_id': existing_q.assessment_id,
+            'original_id': existing_q.original_id or existing_q.question_id
+        }
+        
+        # --- Parse filename for metadata --- 
+        logger.info("🔍 Attempting to parse metadata from filename...")
+        
+        # Determine which filename to parse (CSV if single file, or questions CSV name if ZIP)
+        filename_to_parse = questions_csv_path.name if questions_csv_path else file.filename
+        parsed_meta = parse_meta_from_filename(Path(filename_to_parse))
+        
+        if parsed_meta:
+            # Filename has structure: COURSE_SemX_AYAY_ASSESSMENT_questions.csv
+            course_code, assessment_type, kind, acadyear, semester = parsed_meta
+            logger.info(f"✅ Parsed metadata from filename: {course_code}, Sem{semester}, {acadyear}, {assessment_type}")
+            
+            # Use parsed metadata, but inherit missing parts from parent
+            metadata = {
+                'course_code': course_code or parent_metadata['course_code'],
+                'assessment_type': assessment_type or parent_metadata['assessment_type'],
+                'academic_year': acadyear or parent_metadata['academic_year'],
+                'semester': semester or parent_metadata['semester'],
+                'original_id': parent_metadata['original_id']
+            }
+            
+            
+            # Need to find course with new metadata
+            course_row = db.execute(
+            text("SELECT course_id FROM courses WHERE course_code = :code"),
+                {"code": metadata['course_code']}
+            ).fetchone()
+        
+            if not course_row:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+                raise HTTPException(
+                    status_code=404, 
+                    detail=f"Course '{metadata['course_code']}' not found. Please ensure course exists before uploading."
+                )
+                
+            metadata['course_id'] = course_row.course_id
+            
+            # Find or create assessment
+            assessment = db.execute(
+                text("""
+                    SELECT assessment_id FROM assessments
+                    WHERE course_id = :cid
+                    AND assessment_semester = :sem
+                    AND assessment_acadyear = :ay
+                    AND assessment_type ILIKE :atype
+                """),
+                {"cid": metadata['course_id'], "sem": metadata['semester'], "ay": metadata['academic_year'], "atype": metadata['assessment_type']}
+            ).fetchone()
+            
+            if assessment:
+                metadata['assessment_id'] = assessment.assessment_id
+                metadata['assessment_exists'] = True
+                logger.info(f"✅ Found existing assessment_id: {metadata['assessment_id']}")
+            else:
+                # Assessment doesn't exist yet - flag for creation during confirm
+                metadata['assessment_id'] = None
+                metadata['assessment_exists'] = False
+                metadata['course_id'] = metadata['course_id']  
+                logger.info(f"⚠️ Assessment doesn't exist yet - will be created during confirmation")
+                
+        else: 
+            # No filename structure - inherit ALL metadata from parent
+            logger.info("📋 No filename structure detected - inheriting all metadata from parent question")
+            metadata = parent_metadata.copy()
+            
+            
+        # --- Check for duplicates during preview ---
+        logger.info("🔍 Checking for duplicate questions...")
+        assessment_id = metadata['assessment_id']
+        has_duplicates, duplicate_map = check_for_duplicates(db, assessment_id, questions_data)
+        
+        # --- Build question previews (REMOVE DUPLICATE - keep only one) ---
         questions_preview = []
-        for q in questions_data:
+        for idx, q in enumerate(questions_data):  # ← Add enumerate for duplicate flagging
             qtext = (G(q, "Question Text", "question_text") or "").strip()
             if not qtext:
                 continue
@@ -1089,6 +1294,10 @@ async def edit_upload(id: int, file: UploadFile = File(...), db: Session = Depen
             qnum = (G(q, "Question Number", "question_number") or "").strip()
             sqnum = (G(q, "Sub-Question Number", "sub_question_number") or "").strip()
             pts_txt = (G(q, "Points", "points") or "").strip()
+
+            # Check if this question is a duplicate
+            is_dup = idx in duplicate_map
+            dup_info = duplicate_map.get(idx, {})
 
             questions_preview.append(QuestionPreview(
                 question_number=int(qnum) if qnum else None,
@@ -1106,7 +1315,10 @@ async def edit_upload(id: int, file: UploadFile = File(...), db: Session = Depen
                 difficulty=(G(q, "Difficulty", "difficulty") or "").strip() or None,
                 concepts=(G(q, "Concepts", "concepts", "concept") or "").strip() or None,
                 attachment=(G(q, "Attachment", "attachment") or "").strip() or None,
-                context_id=(G(q, "Context ID", "context_id", "contextid") or "").strip() or None
+                context_id=(G(q, "Context ID", "context_id", "contextid") or "").strip() or None,
+                is_duplicate=is_dup,
+                duplicate_of=dup_info.get("question_id"),
+                duplicate_version=dup_info.get("version_number")
             ))
 
         # --- Build context previews ---
@@ -1120,31 +1332,45 @@ async def edit_upload(id: int, file: UploadFile = File(...), db: Session = Depen
                     context_text=context_text,
                     attachment=(G(c, "Attachment", "attachment") or "").strip() or None
                 ))
+                
+        # --- DECISION POINT: Has duplicates? ---
+        if has_duplicates:
+            logger.warning(f"⚠️ Found {len(duplicate_map)} duplicate(s) - NOT creating upload session")
+            
+            # Clean up directory immediately
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            
+            error_parts = ["Error: The question you uploaded contains duplicates:"]
+            for idx, dup_info in duplicate_map.items():
+                qnum = (G(questions_data[idx], "Question Number", "question_number") or "").strip()
+                error_parts.append(
+                    f"Q{qnum} == Question ID {dup_info['question_id']} (Version {dup_info['version_number']})"
+                )
+            error_message = " | ".join(error_parts)
+            
+            # Return preview without upload_id
+            return UploadPreviewResponse(
+                error_message=error_message,
+                upload_id=None,
+                questions=questions_preview,
+                contexts=contexts_preview,
+                attachments=attachment_info,
+                course_code=metadata['course_code'],
+                assessment_type=metadata['assessment_type'],
+                academic_year=metadata['academic_year'],
+                semester=metadata['semester'],
+                has_duplicates=True,
+                duplicate_count=len(duplicate_map),
+                debug_info={
+                    "questions_count": len(questions_preview),
+                    "contexts_count": len(contexts_preview),
+                    "attachments_count": len(attachment_info),
+                    "duplicate_indices": list(duplicate_map.keys())
+                }
+        )
 
-        # --- Get metadata from existing question ---
-        logger.info(f"📋 Extracting metadata from question ID {id}")
-        existing_q = db.execute(
-            text("""
-                SELECT c.course_code, a.assessment_type, a.assessment_acadyear, a.assessment_semester
-                FROM questions q
-                JOIN assessments a ON q.assessment_id = a.assessment_id
-                JOIN courses c ON a.course_id = c.course_id
-                WHERE q.question_id = :qid
-            """),
-            {"qid": id}
-        ).fetchone()
-        
-        if not existing_q:
-            raise HTTPException(status_code=404, detail=f"Question {id} not found")
-        
-        metadata = {
-            'course_code': existing_q.course_code,
-            'assessment_type': existing_q.assessment_type,
-            'academic_year': existing_q.assessment_acadyear,
-            'semester': existing_q.assessment_semester
-        }
-
-        # --- Save pending upload ---
+        # --- No duplicates - create upload session ---
+        upload_id = temp_upload_id
         pending_uploads[upload_id] = {
             "temp_dir": str(temp_dir),
             "questions_data": questions_data,
@@ -1168,6 +1394,9 @@ async def edit_upload(id: int, file: UploadFile = File(...), db: Session = Depen
             assessment_type=metadata['assessment_type'],
             academic_year=metadata['academic_year'],
             semester=metadata['semester'],
+            has_duplicates=False,
+            duplicate_count=0,
+            error_message=None,
             debug_info={
                 "questions_count": len(questions_preview),
                 "contexts_count": len(contexts_preview),
@@ -1183,17 +1412,14 @@ async def edit_upload(id: int, file: UploadFile = File(...), db: Session = Depen
         raise HTTPException(status_code=500, detail=f"Error processing upload: {str(e)}")
 
 
-# ============================================================================
-# API #4: Confirm Edit
-# ============================================================================
-
+# API #6: Confirm variant upload
 @router.post("/confirm-edits", response_model=ConfirmUploadResponse)
 def confirm_edit(request: ConfirmUploadRequest, db: Session = Depends(get_db)):
     """
     Step 2: Confirm edit and commit to DB:
-    1. Get metadata and check for duplicates
+    1. Get metadata (duplicate check already done in preview)
     2. Insert new question version
-    3. Move attachments to storage bucket
+    3. Move attachments to storage bucket with unique naming
     4. Run fresh backup
     5. Clean up temp files
     """
@@ -1210,57 +1436,65 @@ def confirm_edit(request: ConfirmUploadRequest, db: Session = Depends(get_db)):
     backup_created = False
     
     try:
-        # STEP 1: Get metadata
-        logger.info("📊 Step 1: Getting course and assessment info...")
+        # STEP 1: Get metadata and create assessment if needed
+        logger.info("📊 Step 1: Getting metadata...")
         questions_data = upload_data['questions_data']
         metadata = upload_data['metadata']
         attachment_paths = upload_data['attachment_paths']
         
-        course_code = metadata['course_code']
-        assessment_type = metadata['assessment_type']
-        ay = metadata.get('academic_year')
-        sem = metadata.get('semester')
+        assessment_id = metadata['assessment_id']
+        original_id = metadata.get('original_id')
+        prev_id = metadata.get('previous_version_id')
         
-        # Get course_id
-        course_id = session.execute(
-            text("SELECT course_id FROM courses WHERE course_code = :code LIMIT 1"),
-            {"code": course_code}
-        ).scalar()
+        if prev_id:
+            max_ver = session.execute(
+                text("SELECT MAX(version_number) FROM questions WHERE question_id = :pid OR previous_version_id = :pid OR original_id = :pid"),
+                {"pid": prev_id}
+            ).scalar() or 0
+            new_ver = max_ver + 1
+        else:
+            new_ver = 1
         
-        if not course_id:
-            raise HTTPException(status_code=404, detail=f"Course {course_code} not found")
+        logger.info(f"📊 Calculated new version number: {new_ver}")
         
-        # Get assessment_id
-        assessment_id = session.execute(
-            text("SELECT assessment_id FROM assessments WHERE course_id = :cid AND assessment_type = :at AND COALESCE(assessment_acadyear, '') = COALESCE(:ay, '') AND COALESCE(assessment_semester, '') = COALESCE(:sem, '') LIMIT 1"),
-            {"cid": course_id, "at": assessment_type, "ay": ay or '', "sem": sem or ''}
-        ).scalar()
-        
-        if not assessment_id:
-            raise HTTPException(status_code=404, detail=f"Assessment not found for {course_code} {assessment_type}")
-        
-        # STEP 2: Check for duplicates
-        logger.info("🔍 Step 2: Checking for duplicate questions...")
-        has_duplicates, duplicate_list = check_for_duplicates(session, assessment_id, questions_data)
-        
-        if has_duplicates:
-            error_msg = f"Found {len(duplicate_list)} duplicate question(s):"
-            for dup in duplicate_list:
-                error_msg += f"\n  • Row {dup['row_number']} (Q{dup['question_number']}): '{dup['question_text']}' already exists as question ID {dup['existing_question_id']} (v{dup['existing_version']})"
+        # Check if assessment needs to be created
+        if not metadata.get('assessment_exists', True) or metadata.get('assessment_id') is None:
+            logger.info("📝 Assessment doesn't exist - creating now...")
             
-            raise HTTPException(
-                status_code=400, 
-                detail={
-                    "error": "Duplicate questions found",
-                    "message": error_msg,
-                    "duplicates": duplicate_list
+            course_id = metadata.get('course_id')
+            if not course_id:
+                raise HTTPException(status_code=400, detail="Missing course_id in metadata")
+            
+            result = session.execute(
+                text("""
+                    INSERT INTO assessments (
+                        course_id, assessment_type, assessment_acadyear, assessment_semester
+                    )
+                    VALUES (:cid, :atype, :ay, :sem)
+                    RETURNING assessment_id
+                """),
+                {
+                    "cid": course_id,
+                    "atype": metadata['assessment_type'],
+                    "ay": metadata['academic_year'],
+                    "sem": metadata['semester']
                 }
             )
+            new_assessment_id = result.scalar()
+            session.commit()
+            
+            metadata['assessment_id'] = new_assessment_id
+            logger.info(f"✅ Created new assessment with ID: {new_assessment_id}")
+            
+        assessment_id = metadata['assessment_id']
+        logger.info(f"📊 Using assessment_id: {assessment_id}")
         
-        logger.info("📝 Step 2.5: Processing contexts...")
+        
+        # STEP 2: Process contexts
+        logger.info("📝 Step 2: Processing contexts...")
         contexts_data = upload_data.get('contexts_data', [])
         context_id_map = {}
-
+        
         for r in contexts_data:
             context_local_id = (G(r, "Context ID", "context_id", "contextid") or "").strip()
             context_text = (G(r, "Context Text", "context_text") or "").strip()
@@ -1277,14 +1511,14 @@ def confirm_edit(request: ConfirmUploadRequest, db: Session = Depends(get_db)):
             # Handle context attachments
             catt = (G(r, "Attachment", "attachment") or "").strip()
             if ctx_id and catt:
+                new_att_name = f"{assessment_id}_{original_id}_{new_ver}_{catt}"
                 session.execute(
                     text("INSERT INTO context_attachments (context_id, attachment_name, attachment_url) VALUES (:cid, :name, NULL) ON CONFLICT (context_id, attachment_name) DO NOTHING"),
-                    {"cid": ctx_id, "name": catt}
+                    {"cid": ctx_id, "name": new_att_name}
                 )
 
         session.commit()
         logger.info(f"✅ Processed {len(context_id_map)} context(s)")
-
         
         # STEP 3: Process question edit (insert new version)
         logger.info("✏️ Step 3: Processing question edit...")
@@ -1329,17 +1563,17 @@ def confirm_edit(request: ConfirmUploadRequest, db: Session = Depends(get_db)):
                         assessment_id, context_id, question_number, sub_question_number,
                         question_text, question_type, option_a, option_b, option_c, option_d, option_e,
                         correct_answer, explanation, points, difficulty, concepts,
-                        version_number, previous_version_id, is_latest
+                        version_number, previous_version_id, original_id, is_latest
                     ) VALUES (
                         :aid, NULL, :qnum, :sqnum, :qtxt, :qtype, :a, :b, :c, :d, :e,
-                        :ans, :expl, :pts, :diff, :conc, :ver, :prev_id, TRUE
+                        :ans, :expl, :pts, :diff, :conc, :ver, :prev_id, :orig_id, TRUE
                     )
                     RETURNING question_id
                 """),
                 {"aid": assessment_id, "qnum": qnum, "sqnum": sqnum,
                  "qtxt": qtext, "qtype": qtype, "a": a, "b": b, "c": c, "d": d, "e": e,
                  "ans": ans, "expl": expl, "pts": pts, "diff": diff, "conc": conc,
-                 "ver": new_ver, "prev_id": prev_id}
+                 "ver": new_ver, "prev_id": prev_id, "orig_id": original_id}
             )
             qid = res.scalar()
             questions_inserted += 1
@@ -1353,18 +1587,25 @@ def confirm_edit(request: ConfirmUploadRequest, db: Session = Depends(get_db)):
             
             # Handle question attachments
             if qid and qatt:
+                new_att_name = f"{assessment_id}_{original_id}_{new_ver}_{qatt}"
                 session.execute(
                     text("INSERT INTO question_attachments (question_id, attachment_name, attachment_url) VALUES (:qid, :name, NULL) ON CONFLICT (question_id, attachment_name) DO NOTHING"),
-                    {"qid": qid, "name": qatt}
+                    {"qid": qid, "name": new_att_name}
                 )
+  
         
         session.commit()
         logger.info(f"✅ Inserted {questions_inserted} question(s)")
         
         # STEP 4: Move attachments to storage bucket
         logger.info("📎 Step 4: Moving attachments to storage bucket...")
-        attachments_copied = copy_attachments_to_storage(attachment_paths)
-        
+        attachments_copied =attachments_copied = copy_attachments_to_storage(
+            attachment_paths, 
+            assessment_id, 
+            original_id=original_id, 
+            version_number=new_ver
+        )
+                
         # STEP 5: Run fresh backup
         logger.info("💾 Step 5: Creating fresh backup...")
         backup_created = trigger_backup()
@@ -1394,8 +1635,7 @@ def confirm_edit(request: ConfirmUploadRequest, db: Session = Depends(get_db)):
         logger.error(f"❌ Confirm edit failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Confirm failed: {str(e)}")
 
-
-# API #4 - delete edits
+# API #7: Cancel variant upload
 @router.post("/delete-edits", response_model=CancelUploadResponse)
 def delete_edit(request: CancelUploadRequest = Body(...)):
     """Step 3: Cancel pending edit upload"""
@@ -1410,14 +1650,14 @@ def delete_edit(request: CancelUploadRequest = Body(...)):
     return CancelUploadResponse(success=True, message="Edit upload cancelled", upload_id=upload_id)
 
 
-# API #5: Upload Assessment - ENHANCED WITH BETTER ATTACHMENT HANDLING
+# API #8: Upload Assessment
 @router.post("/upload", response_model=UploadPreviewResponse)
-async def upload_assessment(file: UploadFile = File(...)):
+async def upload_assessment(file: UploadFile = File(...), db: Session = Depends(get_db)):
     """Step 1: Upload CSV or ZIP, parse files, return preview with attachment metadata"""
-    upload_id = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    temp_dir = Path(tempfile.mkdtemp(prefix=f"upload_{upload_id}_"))
+    temp_upload_id = datetime.now().strftime("%Y%m%d_%H%M%S_%f") 
+    temp_dir = Path(tempfile.mkdtemp(prefix=f"upload_{temp_upload_id}_"))
     
-    logger.info(f"=== Starting upload {upload_id} ===")
+    logger.info(f"=== Starting upload {temp_upload_id} ===")
     
     try:
         file_path = temp_dir / file.filename
@@ -1433,28 +1673,29 @@ async def upload_assessment(file: UploadFile = File(...)):
         questions_csv_path = None
         context_csv_path = None
         metadata = {}
+        parent_zip_name = None
         
         # Handle ZIP files
         if file.filename.endswith('.zip'):
             logger.info(f"📦 Processing ZIP file: {file.filename}")
-            attachments, attachment_paths, attachment_info = extract_attachments_from_zip(temp_dir, file_path)
+            parent_zip_name = file.filename
+            attachments, attachment_paths, attachment_info = extract_attachments_from_zip(temp_dir, file_path, parent_zip_name)
             
             # Find CSVs - look for both questions and contexts
             for csv_file in temp_dir.rglob('*.csv'):
                 if '__MACOSX' in str(csv_file) or csv_file.name.startswith('.'):
                     continue
                 
-                csv_name_lower = csv_file.name.lower()
                 logger.info(f"📄 Found CSV in ZIP: {csv_file.name}")
                 
-                # Check if it's a contexts file
-                if 'context' in csv_name_lower and 'question' not in csv_name_lower:
+                # Context CSV detection
+                if is_context_file(csv_file.name):
                     context_csv_path = csv_file
                     logger.info(f"✅ Identified as contexts file: {csv_file.name}")
                     continue
                 
-                # Check if it's a questions file or try to parse metadata
-                if 'question' in csv_name_lower:
+                # Questions CSV detection
+                if is_question_file(csv_file.name):
                     questions_csv_path = csv_file
                     logger.info(f"✅ Identified as questions file: {csv_file.name}")
                     
@@ -1541,6 +1782,7 @@ async def upload_assessment(file: UploadFile = File(...)):
         
         is_valid, error_msg = validate_questions_data(questions_data, is_edit=False)
         if not is_valid:
+            shutil.rmtree(temp_dir, ignore_errors=True) 
             raise HTTPException(status_code=400, detail=f"Invalid questions.csv: {error_msg}")
         
         # Extract metadata from CSV content if not already set from filename
@@ -1568,6 +1810,7 @@ async def upload_assessment(file: UploadFile = File(...)):
             contexts_data = read_csv_rows(context_csv_path)
             is_valid, error_msg = validate_context_data(contexts_data)
             if not is_valid:
+                shutil.rmtree(temp_dir, ignore_errors=True)  # ← Add cleanup
                 raise HTTPException(status_code=400, detail=f"Invalid context.csv: {error_msg}")
         else:
             # Extract contexts from questions CSV if no separate contexts file
@@ -1589,17 +1832,70 @@ async def upload_assessment(file: UploadFile = File(...)):
                     seen_contexts.add(ctx_id)
                     logger.info(f"📄 Extracted context {ctx_id} from questions.csv")
         
-        # Build preview
+        # --- Get or create course/assessment to check for duplicates ---
+        if not metadata.get('course_code') or not metadata.get('assessment_type'):
+            shutil.rmtree(temp_dir, ignore_errors=True)  # ← Add cleanup
+            raise HTTPException(
+                status_code=400,
+                detail="Missing course_code or assessment_type in metadata. Please ensure filename follows the pattern or CSV contains this information."
+            )
+        
+        course_code = metadata['course_code']
+        assessment_type = metadata['assessment_type']
+        ay = metadata.get('academic_year')
+        sem = metadata.get('semester')
+
+        # Get or create course
+        course_id = db.execute(
+            text("SELECT course_id FROM courses WHERE course_code = :code LIMIT 1"),
+            {"code": course_code}
+        ).scalar()
+        
+        if not course_id:
+            result = db.execute(
+                text("INSERT INTO courses (course_code, course_name) VALUES (:code, :name) RETURNING course_id"),
+                {"code": course_code, "name": course_code}
+            )
+            course_id = result.scalar()
+            db.commit()
+        
+        # Get or create assessment
+        assessment_id = db.execute(
+            text("SELECT assessment_id FROM assessments WHERE course_id = :cid AND assessment_type = :at AND COALESCE(assessment_acadyear, '') = COALESCE(:ay, '') AND COALESCE(assessment_semester, '') = COALESCE(:sem, '') LIMIT 1"),
+            {"cid": course_id, "at": assessment_type, "ay": ay or '', "sem": sem or ''}
+        ).scalar()
+
+        if not assessment_id:
+            logger.info(f"📝 Creating new assessment: {assessment_type} for {course_code}")
+            result = db.execute(
+                text("INSERT INTO assessments (course_id, assessment_type, assessment_acadyear, assessment_semester) VALUES (:cid, :at, :ay, :sem) RETURNING assessment_id"),
+                {"cid": course_id, "at": assessment_type, "ay": ay, "sem": sem}
+            )
+            assessment_id = result.scalar()
+            db.commit()
+            logger.info(f"✅ Created assessment_id: {assessment_id}")
+        
+        metadata['assessment_id'] = assessment_id
+
+        # --- Check for duplicates during preview ---
+        logger.info("🔍 Checking for duplicate questions...")
+        has_duplicates, duplicate_map = check_for_duplicates(db, assessment_id, questions_data)
+        
+        # --- Build question previews ---
         questions_preview = []
-        for q in questions_data:
+        for idx, q in enumerate(questions_data):
             qtext = (G(q, "Question Text", "question_text") or "").strip()
             if not qtext:
                 continue
-            
+
             qnum = (G(q, "Question Number", "question_number") or "").strip()
             sqnum = (G(q, "Sub-Question Number", "sub_question_number") or "").strip()
             pts_txt = (G(q, "Points", "points") or "").strip()
-            
+
+            # Check if this question is a duplicate
+            is_dup = idx in duplicate_map
+            dup_info = duplicate_map.get(idx, {})
+
             questions_preview.append(QuestionPreview(
                 question_number=int(qnum) if qnum else None,
                 sub_question_number=int(sqnum) if sqnum else None,
@@ -1616,9 +1912,13 @@ async def upload_assessment(file: UploadFile = File(...)):
                 difficulty=(G(q, "Difficulty", "difficulty") or "").strip() or None,
                 concepts=(G(q, "Concepts", "concepts", "concept") or "").strip() or None,
                 attachment=(G(q, "Attachment", "attachment") or "").strip() or None,
-                context_id=(G(q, "Context ID", "context_id", "contextid") or "").strip() or None
+                context_id=(G(q, "Context ID", "context_id", "contextid") or "").strip() or None,
+                is_duplicate=is_dup,
+                duplicate_of=dup_info.get("question_id"),
+                duplicate_version=dup_info.get("version_number")
             ))
-        
+
+        # --- Build context previews ---
         contexts_preview = []
         for c in contexts_data:
             context_id = (G(c, "Context ID", "context_id", "contextid") or "").strip()
@@ -1630,6 +1930,44 @@ async def upload_assessment(file: UploadFile = File(...)):
                     attachment=(G(c, "Attachment", "attachment") or "").strip() or None
                 ))
         
+        # --- DECISION POINT: Has duplicates? ---
+        if has_duplicates:
+            logger.warning(f"⚠️ Found {len(duplicate_map)} duplicate(s) - NOT creating upload session")
+            # Clean up temp directory immediately
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            
+            # Build clear error message
+            error_parts = ["Error: The question you uploaded contains duplicates:"]
+            for idx, dup_info in duplicate_map.items():
+                qnum = (G(questions_data[idx], "Question Number", "question_number") or "").strip()
+                error_parts.append(
+                    f"Q{qnum} == Question ID {dup_info['question_id']} (Version {dup_info['version_number']})"
+                )
+            error_message = " | ".join(error_parts)
+            
+            # Return preview WITHOUT upload_id (cannot be confirmed)
+            return UploadPreviewResponse(
+                error_message=error_message,
+                upload_id=None, 
+                questions=questions_preview,
+                contexts=contexts_preview,
+                attachments=attachment_info,
+                course_code=metadata.get('course_code'),
+                assessment_type=metadata.get('assessment_type'),
+                academic_year=metadata.get('academic_year'),
+                semester=metadata.get('semester'),
+                has_duplicates=True,  
+                duplicate_count=len(duplicate_map), 
+                debug_info={
+                    'questions_count': len(questions_preview),
+                    'contexts_count': len(contexts_preview),
+                    'attachments_count': len(attachment_info),
+                    'duplicate_indices': list(duplicate_map.keys())
+                }
+            )
+        
+        # No duplicates - create upload session
+        upload_id = temp_upload_id 
         pending_uploads[upload_id] = {
             'temp_dir': str(temp_dir),
             'questions_data': questions_data,
@@ -1646,7 +1984,7 @@ async def upload_assessment(file: UploadFile = File(...)):
         logger.info(f"✅ Upload preview created: {upload_id} with {len(questions_preview)} questions, {len(contexts_preview)} contexts, {len(attachment_info)} attachments")
         
         return UploadPreviewResponse(
-            upload_id=upload_id,
+            upload_id=upload_id, 
             questions=questions_preview,
             contexts=contexts_preview,
             attachments=attachment_info,
@@ -1654,13 +1992,16 @@ async def upload_assessment(file: UploadFile = File(...)):
             assessment_type=metadata.get('assessment_type'),
             academic_year=metadata.get('academic_year'),
             semester=metadata.get('semester'),
+            has_duplicates=False,
+            duplicate_count=0,
+            error_message=None,
             debug_info={
                 'questions_count': len(questions_preview),
                 'contexts_count': len(contexts_preview),
                 'attachments_count': len(attachment_info)
             }
         )
-    
+ 
     except HTTPException:
         shutil.rmtree(temp_dir, ignore_errors=True)
         raise
@@ -1669,10 +2010,7 @@ async def upload_assessment(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=f"Error processing upload: {str(e)}")
 
 
-# ============================================================================
-# API #5: Confirm Upload
-# ============================================================================
-
+# API #9: Confirm assessment upload
 @router.post("/confirm-upload", response_model=ConfirmUploadResponse)
 async def confirm_upload(request: ConfirmUploadRequest, db: Session = Depends(get_db)):
     """
@@ -1706,61 +2044,12 @@ async def confirm_upload(request: ConfirmUploadRequest, db: Session = Depends(ge
         attachments = upload_data['attachments']
         attachment_paths = upload_data['attachment_paths']
         metadata = upload_data['metadata']
+        assessment_id = metadata['assessment_id']
         
-        course_code = metadata['course_code']
-        assessment_type = metadata['assessment_type']
-        ay = metadata.get('academic_year')
-        sem = metadata.get('semester')
+        assessment_id = metadata['assessment_id']
         
-        # Get or create course
-        course_id = session.execute(
-            text("SELECT course_id FROM courses WHERE course_code = :code LIMIT 1"),
-            {"code": course_code}
-        ).scalar()
-        
-        if not course_id:
-            result = session.execute(
-                text("INSERT INTO courses (course_code, course_name) VALUES (:code, :name) RETURNING course_id"),
-                {"code": course_code, "name": course_code}
-            )
-            course_id = result.scalar()
-        
-        # Get or create assessment
-        assessment_id = session.execute(
-            text("SELECT assessment_id FROM assessments WHERE course_id = :cid AND assessment_type = :at AND COALESCE(assessment_acadyear, '') = COALESCE(:ay, '') AND COALESCE(assessment_semester, '') = COALESCE(:sem, '') LIMIT 1"),
-            {"cid": course_id, "at": assessment_type, "ay": ay, "sem": sem}
-        ).scalar()
-
-        if not assessment_id:
-            logger.info(f"📝 Creating new assessment: {assessment_type} for {course_code}")
-            result = session.execute(
-                text("INSERT INTO assessments (course_id, assessment_type, assessment_acadyear, assessment_semester) VALUES (:cid, :at, :ay, :sem) RETURNING assessment_id"),
-                {"cid": course_id, "at": assessment_type, "ay": ay, "sem": sem}
-            )
-            assessment_id = result.scalar()
-            logger.info(f"✅ Created assessment_id: {assessment_id}")
-
-        session.commit()
-                
-        # STEP 2: Check for duplicate questions
-        logger.info("🔍 Step 3: Checking for duplicate questions...")
-        has_duplicates, duplicate_list = check_for_duplicates(session, assessment_id, questions_data)        
-        if has_duplicates:
-            error_msg = f"Found {len(duplicate_list)} duplicate question(s):"
-            for dup in duplicate_list:
-                error_msg += f"\n  • Row {dup['row_number']} (Q{dup['question_number']}): '{dup['question_text']}' already exists as question ID {dup['existing_question_id']} (v{dup['existing_version']})"
-            
-            raise HTTPException(
-                status_code=400, 
-                detail={
-                    "error": "Duplicate questions found",
-                    "message": error_msg,
-                    "duplicates": duplicate_list
-                }
-            )
-        
-        # STEP 3: Insert contexts
-        logger.info("📝 Step 4: Inserting contexts...")
+        # STEP 2: Insert contexts
+        logger.info("📝 Step 2: Inserting contexts...")
         context_id_map = {}
         for r in contexts_data:
             context_local_id = (G(r, "Context ID", "context_id", "contextid") or "").strip()
@@ -1779,16 +2068,17 @@ async def confirm_upload(request: ConfirmUploadRequest, db: Session = Depends(ge
             # Handle context attachments
             catt = (G(r, "Attachment", "attachment") or "").strip()
             if ctx_id and catt:
+                new_att_name = f"{assessment_id}_{catt}"
                 session.execute(
                     text("INSERT INTO context_attachments (context_id, attachment_name, attachment_url) VALUES (:cid, :name, NULL) ON CONFLICT (context_id, attachment_name) DO NOTHING"),
-                    {"cid": ctx_id, "name": catt}
+                    {"cid": ctx_id, "name": new_att_name}
                 )
         
         session.commit()
         logger.info(f"✅ Inserted {contexts_inserted} context(s)")
         
-        # STEP 4: Insert questions
-        logger.info("📝 Step 5: Inserting questions...")
+        # STEP 3: Insert questions
+        logger.info("📝 Step 3: Inserting questions...")
         for r in questions_data:
             qtext = (G(r, "Question Text", "question_text") or "").strip()
             if not qtext:
@@ -1834,24 +2124,25 @@ async def confirm_upload(request: ConfirmUploadRequest, db: Session = Depends(ge
             
             # Handle question attachments
             if qid and qatt:
+                new_att_name = f"{assessment_id}_{qatt}"
                 session.execute(
                     text("INSERT INTO question_attachments (question_id, attachment_name, attachment_url) VALUES (:qid, :name, NULL) ON CONFLICT (question_id, attachment_name) DO NOTHING"),
-                    {"qid": qid, "name": qatt}
+                    {"qid": qid, "name": new_att_name}
                 )
         
         session.commit()
         logger.info(f"✅ Inserted {questions_inserted} question(s)")
         
-        # STEP 5: Move attachments to storage bucket
-        logger.info("📎 Step 6: Moving attachments to storage bucket...")
-        attachments_copied = copy_attachments_to_storage(attachment_paths)
+        # STEP 4: Move attachments to storage bucket
+        logger.info("📎 Step 4: Moving attachments to storage bucket...")
+        attachments_copied = copy_attachments_to_storage(attachment_paths, assessment_id)
         
-        # STEP 6: Run fresh backup
-        logger.info("💾 Step 7: Creating fresh backup...")
+        # STEP 5: Run fresh backup
+        logger.info("💾 Step 5: Creating fresh backup...")
         backup_created = trigger_backup()
         
-        # STEP 7: Clean up batch folder
-        logger.info("🧹 Step 8: Cleaning up temporary files...")
+        # STEP 6: Clean up batch folder
+        logger.info("🧹 Step 6: Cleaning up temporary files...")
         shutil.rmtree(temp_dir, ignore_errors=True)
         del pending_uploads[upload_id]
         
@@ -1876,7 +2167,7 @@ async def confirm_upload(request: ConfirmUploadRequest, db: Session = Depends(ge
         raise HTTPException(status_code=500, detail=f"Failed to confirm upload: {str(e)}")
         
 
-# API #5: Cancel Upload
+# API #10 - Cancel assessment upload
 @router.post("/cancel-upload", response_model=CancelUploadResponse)
 def cancel_upload(request: CancelUploadRequest = Body(...)):
     """Step 3: Cancel a pending upload"""
@@ -1897,52 +2188,15 @@ def cancel_upload(request: CancelUploadRequest = Body(...)):
         raise HTTPException(status_code=500, detail=f"Failed to cancel upload: {str(e)}")
 
 
-# API #6: Version Diff
-def highlight_changes(old_text: str, new_text: str) -> Dict[str, str]:
-    """Generate inline highlighted HTML showing additions and deletions"""
-    if old_text == new_text:
-        return None
-    
-    similarity = SequenceMatcher(None, old_text, new_text).ratio()
-    if similarity < 0.3:
-        return {
-            "previous": f'<span style="background-color: #ffc0c0; text-decoration: line-through;">{old_text}</span>' if old_text else "",
-            "current": f'<span style="background-color: #c0ffc0; font-weight: bold;">{new_text}</span>' if new_text else "",
-            "type": "complete_change"
-        }
-    
-    old_words = old_text.split()
-    new_words = new_text.split()
-    s = SequenceMatcher(None, old_words, new_words)
-    old_html = []
-    new_html = []
-    
-    for tag, i1, i2, j1, j2 in s.get_opcodes():
-        old_chunk = ' '.join(old_words[i1:i2])
-        new_chunk = ' '.join(new_words[j1:j2])
-        
-        if tag == 'equal':
-            old_html.append(old_chunk)
-            new_html.append(new_chunk)
-        elif tag == 'delete':
-            old_html.append(f'<span style="background-color: #ffc0c0; text-decoration: line-through;">{old_chunk}</span>')
-        elif tag == 'insert':
-            new_html.append(f'<span style="background-color: #c0ffc0; font-weight: bold;">{new_chunk}</span>')
-        elif tag == 'replace':
-            old_html.append(f'<span style="background-color: #ffc0c0; text-decoration: line-through;">{old_chunk}</span>')
-            new_html.append(f'<span style="background-color: #c0ffc0; font-weight: bold;">{new_chunk}</span>')
-        
-        if tag != 'equal' and i2 < len(old_words):
-            old_html.append(' ')
-        if tag != 'equal' and j2 < len(new_words):
-            new_html.append(' ')
-    
-    return {"previous": ''.join(old_html), "current": ''.join(new_html), "type": "partial_change"}
-
-
+# API #11: Version Diff
 @router.get("/{id}/diff/{version_id}")
-async def get_question_diff(id: int, version_id: int, db: Session = Depends(get_db)):
+async def get_question_diff(id: str, version_id: str, db: Session = Depends(get_db)):
     """Compare two versions of a question"""
+    
+    
+    id_int = validate_positive_int(id, "question ID")
+    version_id_int = validate_positive_int(version_id, "version ID")
+
     query = text("SELECT * FROM questions WHERE question_id IN (:id, :version_id)")
     result = db.execute(query, {"id": id, "version_id": version_id}).fetchall()
     
@@ -1994,9 +2248,12 @@ async def get_question_diff(id: int, version_id: int, db: Session = Depends(get_
     }
 
 
-# API #7: Suggest Question Variants
+# API #11: Suggest similar questions
 @router.get("/{id}/suggestions")
-async def get_question_suggestions(id: int, db: Session = Depends(get_db), top_n: int = Query(5)):
+async def get_question_suggestions(id: str, db: Session = Depends(get_db), top_n: str = Query(5)):
+    id_int = validate_positive_int(id, "question ID")
+    top_n_int = validate_positive_int(top_n, "number of suggestions")
+    
     """Suggest variant questions based on course, difficulty, type, and concepts"""
     try:
         ref_query = text("""
@@ -2007,7 +2264,7 @@ async def get_question_suggestions(id: int, db: Session = Depends(get_db), top_n
             WHERE q.question_id = :id
         """)
         
-        ref_result = db.execute(ref_query, {"id": id}).fetchone()
+        ref_result = db.execute(ref_query, {"id": id_int}).fetchone()
         if not ref_result:
             raise HTTPException(status_code=404, detail="Question not found")
         
@@ -2076,7 +2333,7 @@ async def get_question_suggestions(id: int, db: Session = Depends(get_db), top_n
                 "concept_similarity": "TF-IDF cosine similarity",
                 "note": "Includes all versions and related questions"
             },
-            "suggested_variants": suggestions[:top_n],
+            "suggested_variants": suggestions[:top_n_int],
             "total_candidates": len(candidates)
         }
     
