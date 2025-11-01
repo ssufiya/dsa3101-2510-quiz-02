@@ -5,7 +5,7 @@ set -euo pipefail
 REPO="${REPO:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 
 # Default asset roots (relative to REPO). You now only use storage/
-ASSET_ROOTS_REL_DEFAULT=("backend/quizbank-db/storage")
+ASSET_ROOTS_REL_DEFAULT=("quizbank-db/attachment_storage")
 IFS=' ' read -r -a ASSET_ROOTS_REL <<< "${ASSET_ROOTS_REL:-${ASSET_ROOTS_REL_DEFAULT[*]}}"
 
 ASSETS_BACKUP_DIR="${ASSETS_BACKUP_DIR:-$REPO/backend/backups/assets}"

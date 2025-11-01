@@ -104,62 +104,77 @@ def get_mime_type(filename: str) -> str:
     return mime_map.get(ext, 'application/octet-stream')
 
 def trigger_backup():
-    """Trigger database backup after successful ingestion"""
+    """Trigger database AND assets backup after successful ingestion"""
     try:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_file = BACKUP_DIR / f"backup_{timestamp}.sql.gz"
+        scripts_dir = BACKEND_ROOT / "quizbank-db" / "scripts"
         
-        logger.info(f"🔄 Creating database backup: {backup_file}")
+        logger.info(f"💾 Creating paired backups with timestamp: {timestamp}")
         
-        # Run pg_dump directly (we're already in a container that can reach the DB)
-        result = subprocess.run(
-            [
-                "pg_dump",
-                "-h", "quizbank_db",
-                "-U", "postgres",
-                "-d", "quizbank",
-                "--no-password"
-            ],
+        # ========== 1. BACKUP DATABASE ==========
+        logger.info(f"📊 Backing up database...")
+        backup_db_script = scripts_dir / "backup_db.sh"
+        
+        if not backup_db_script.exists():
+            logger.error(f"❌ backup_db.sh not found at {backup_db_script}")
+            return False
+        
+        db_result = subprocess.run(
+            ["bash", str(backup_db_script)],
             capture_output=True,
+            text=True,
             check=True,
-            env={**os.environ, "PGPASSWORD": "postgres"}
+            env={
+                **os.environ,
+                "BACKUP_STAMP": timestamp,
+                "BACKUP_DIR": str(BACKEND_ROOT / "backups" / "quizbank")
+            }
         )
         
-        # Compress the output
-        import gzip
-        with gzip.open(backup_file, 'wb') as f:
-            f.write(result.stdout)
+        if db_result.stdout:
+            for line in db_result.stdout.strip().split('\n'):
+                logger.info(f"  {line}")
         
-        # Create/update symlink to latest backup
-        latest_link = BACKUP_DIR / "latest.sql.gz"
+        logger.info(f"✅ Database backup complete")
         
-        # Remove existing symlink or file (more robust approach)
-        try:
-            if latest_link.is_symlink():
-                latest_link.unlink()
-            elif latest_link.exists():
-                latest_link.unlink()
-        except Exception as e:
-            logger.warning(f"⚠️ Could not remove old symlink: {e}")
+        # ========== 2. BACKUP ASSETS ==========
+        logger.info(f"📦 Backing up assets...")
+        backup_assets_script = scripts_dir / "backup_assets.sh"
         
-        # Create new symlink using relative path
-        try:
-            latest_link.symlink_to(backup_file.name)
-            logger.info(f"🔗 Latest backup linked: latest.sql.gz -> {backup_file.name}")
-        except Exception as e:
-            logger.warning(f"⚠️ Could not create symlink: {e}, copying file instead")
-            # Fallback: just copy the file if symlink fails
-            shutil.copy2(backup_file, latest_link)
-            logger.info(f"📋 Latest backup copied to: latest.sql.gz")
+        if not backup_assets_script.exists():
+            logger.error(f"❌ backup_assets.sh not found at {backup_assets_script}")
+            return False
         
-        logger.info(f"✅ Database backup created: {backup_file}")
+        assets_result = subprocess.run(
+            ["bash", str(backup_assets_script)],
+            capture_output=True,
+            text=True,
+            check=True,
+            env={
+                **os.environ,
+                "ASSETS_STAMP": timestamp,  # ← Same timestamp for pairing
+                "REPO": str(BACKEND_ROOT),  # ← BACKEND_ROOT is already at backend/
+                "ASSETS_BACKUP_DIR": str(BACKEND_ROOT / "backups" / "assets")
+            }
+        )
+        
+        if assets_result.stdout:
+            for line in assets_result.stdout.strip().split('\n'):
+                logger.info(f"  {line}")
+        
+        logger.info(f"✅ Assets backup complete")
+        logger.info(f"✅ Paired backups ready: backup_{timestamp}.sql.gz + assets_{timestamp}.tgz")
+        
         return True
+        
     except subprocess.CalledProcessError as e:
-        logger.error(f"❌ Backup failed (pg_dump error): {e.stderr.decode() if e.stderr else 'Unknown error'}")
+        error_msg = e.stderr if e.stderr else str(e)
+        logger.error(f"❌ Backup script failed: {error_msg}")
         return False
     except Exception as e:
         logger.error(f"❌ Backup failed: {e}")
         return False
+    
 
 def get_latest_backup() -> Optional[Path]:
     """Find the most recent backup file"""

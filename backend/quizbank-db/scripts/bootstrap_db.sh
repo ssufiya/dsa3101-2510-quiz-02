@@ -127,6 +127,9 @@ else
   bash "$SCRIPTS/backup_db.sh" || echo "⚠️ Backup failed (continuing)"
   
   echo "🗂 Backing up assets after seed…"
+  REPO="$REPO" \
+  ASSETS_BACKUP_DIR="$ASSETS_BACKUP_DIR" \
+  ASSET_ROOTS_REL="quizbank-db/attachment_storage" \
   bash "$SCRIPTS/backup_assets.sh" || echo "⚠️ backup_assets.sh failed (continuing)"
 fi
 
