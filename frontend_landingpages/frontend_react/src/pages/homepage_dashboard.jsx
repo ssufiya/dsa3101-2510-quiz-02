@@ -26,7 +26,7 @@ export function Homepage({ onLogout, onCreateQuiz, onEditQuiz, onViewQuiz, onGoT
               </div>
               <div>
                 <h1 className="text-xl">Quiz Bank</h1>
-                <p className="text-sm text-muted-foreground">Effortlessly manage your question library, design assessments, and track every version of your questions.</p>
+                <p className="text-sm text-muted-foreground">A portal for managing questions and assessments for Department of Statistics & Data Science</p>
               </div>
             </div>
 

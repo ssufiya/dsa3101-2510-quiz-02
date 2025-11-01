@@ -243,7 +243,6 @@ export function QuestionLibrary({
     difficulties: [],
     types: [],
     courses: [],
-    semesters: [],
     matchMode: "",
   });
   const [questions, setQuestions] = useState([]);
@@ -252,7 +251,6 @@ export function QuestionLibrary({
   const difficulties = ["Low", "Med", "High"];
   const types = ["Code", "T/F", "MCQ", "MRQ", "SRQ"];
   const courses = ["DSA1101", "IND5003", "ST1131", "ST2131", "ST2137"];
-  const semesters = ["AY23/24 Sem 1", "AY23/24 Sem 2"];
   const matches = ["Match All", "Match Any"];
 
   /* --- Fetch Questions (correct logic from first version) --- */
@@ -264,7 +262,6 @@ export function QuestionLibrary({
           difficulty: filters.difficulties.length ? filters.difficulties.join(",") : undefined,
           type: filters.types.length ? filters.types.join(",") : undefined,
           subject: filters.courses.length ? filters.courses.join(",") : undefined,
-          semester: filters.semesters.length ? filters.semesters.join(",") : undefined,
           topic: searchTerm || undefined,
           match: filters.matchMode || undefined,
           fuzzy: true,
@@ -297,7 +294,6 @@ export function QuestionLibrary({
       difficulties: [],
       types: [],
       courses: [],
-      semesters: [],
       matchMode: "",
     });
     fetchQuestions({});
@@ -353,7 +349,6 @@ export function QuestionLibrary({
         <MultiSelectDropdown label="Select Difficulty" options={difficulties} selected={filters.difficulties} setSelected={(vals) => setFilters({ ...filters, difficulties: vals })} />
         <MultiSelectDropdown label="Select Type" options={types} selected={filters.types} setSelected={(vals) => setFilters({ ...filters, types: vals })} />
         <MultiSelectDropdown label="Select Course" options={courses} selected={filters.courses} setSelected={(vals) => setFilters({ ...filters, courses: vals })} />
-        <MultiSelectDropdown label="Select Semester" options={semesters} selected={filters.semesters} setSelected={(vals) => setFilters({ ...filters, semesters: vals })} />
         <Input placeholder="Search for topic..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-64 rounded-lg text-center" />
         <SingleSelectDropdown label="Filter by" options={["Match All", "Match Any"]} selected={filters.matchMode} setSelected={(val) => setFilters({ ...filters, matchMode: val })} />
       </div>

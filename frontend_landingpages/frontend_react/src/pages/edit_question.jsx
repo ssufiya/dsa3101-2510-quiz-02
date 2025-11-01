@@ -3,7 +3,7 @@ import axios from "axios";
 import { Button } from "../components/button";
 import { Input } from "../components/input";
 import { Textarea } from "../components/textarea";
-import { Card, CardContent, CardHeader, CardTitle } from "../components/card";
+import { Card, CardContent } from "../components/card";
 import {
   Dialog,
   DialogContent,
@@ -66,10 +66,15 @@ export default function EditQuestion({ questionId, questionData, onBack, onSave 
     setOptions(updated);
   };
 
+  /* ------------------------------------------------------------
+   * 🧩 Step 1: Upload edit preview
+   * 🧩 Step 2: Confirm edit (commit new version)
+   * 🧩 Optional: Cancel edit upload
+   * ------------------------------------------------------------ */
   const handleSave = async () => {
     if (!questionText || !courseName || !courseCode) {
       setModalType("error");
-      setModalMessage(" Please fill in all required fields (Course Name, Course Code, Question Text).");
+      setModalMessage("Please fill in all required fields (Course Name, Course Code, Question Text).");
       setModalOpen(true);
       return;
     }
@@ -106,60 +111,76 @@ export default function EditQuestion({ questionId, questionData, onBack, onSave 
     const formData = new FormData();
     formData.append("file", blob, `question_${questionId}_edit.csv`);
 
+    let uploadId = null;
+
     try {
-      const res = await axios.post(
-        `http://localhost:5003/api/questions/${questionId}/editversion`,
+      // 🔹 Step 1: Upload the edit preview
+      const previewRes = await axios.post(
+        `http://localhost:5003/api/questions/edit?id=${questionId}`,
         formData,
         { headers: { "Content-Type": "multipart/form-data" } }
       );
 
-      const newId = res.data.new_question_id;
-      const newVersion = res.data.new_version_number;
-      const parentId = res.data.previous_version_id || questionId;
+      uploadId = previewRes.data.upload_id;
+      if (!uploadId) throw new Error("No upload_id returned from preview step");
 
-      const newQuestionRes = await axios.get(`http://localhost:5003/api/questions/${newId}`);
+      // 🔹 Step 2: Confirm the edit (commit to DB)
+      const confirmRes = await axios.post(
+        "http://localhost:5003/api/questions/confirm-edits",
+        { upload_id: uploadId }
+      );
 
-      // Success modal
-      setModalType("success");
-      setModalMessage(`Version ${newVersion} of question updated successfully!`);
+      if (confirmRes.data.success) {
+        setModalType("success");
+        setModalMessage(`New version committed successfully!`);
+      } else {
+        throw new Error(confirmRes.data.message || "Confirm step failed");
+      }
+
       setModalOpen(true);
-
-      // Auto-close and return
       setTimeout(() => {
         setModalOpen(false);
-        onSave(newQuestionRes.data, parentId);
+        onSave({}, questionId);
       }, 2500);
     } catch (err) {
-
-      const data = err.response?.data;
-      let detail = "Error updating question.";
-
-      if (typeof data === "string") detail = data;
-      else if (Array.isArray(data?.errors)) detail = data.errors.join("\n• ");
-      else if (typeof data?.detail === "string") detail = data.detail;
-      else if (Array.isArray(data?.detail)) detail = data.detail.join("\n• ");
-      else if (typeof data?.detail === "object" && data?.detail?.errors)
-        detail = data.detail.errors.join("\n• ");
-
+      const msg = err.response?.data?.detail || err.message || "Error updating question.";
       setModalType("error");
-      setModalMessage(`${detail}`);
+      setModalMessage(msg);
       setModalOpen(true);
+
+      // 🔹 Optional Step 3: Cancel the edit if preview started but confirm failed
+      if (uploadId) {
+        try {
+          await axios.post("http://localhost:5003/api/questions/delete-edits", {
+            upload_id: uploadId,
+          });
+          console.log(`🗑️ Cancelled failed upload ${uploadId}`);
+        } catch (cancelErr) {
+          console.warn("Failed to cancel upload:", cancelErr.message);
+        }
+      }
     }
+  };
+
+  /* ------------------------------------------------------------
+   * 🧹 Cancel button handler (manual user cancel)
+   * ------------------------------------------------------------ */
+  const handleCancel = async () => {
+    setModalType("error");
+    setModalMessage("Edit upload cancelled by user.");
+    setModalOpen(true);
+
+    setTimeout(() => {
+      setModalOpen(false);
+      onBack();
+    }, 1500);
   };
 
   return (
     <>
       {/* --- Page Header --- */}
-      <div
-        style={{
-          textAlign: "center",
-          marginBottom: "20px",
-          marginTop: "10px",
-        }}
-      >
-        <h1 style={{ fontSize: "32px", fontWeight: "600", color: "#111827" }}>
-          Edit Question
-        </h1>
+      <div style={{ textAlign: "center", marginBottom: "20px", marginTop: "10px" }}>
+        <h1 style={{ fontSize: "32px", fontWeight: "600", color: "#111827" }}>Edit Question</h1>
         <p style={{ color: "#6b7280", fontSize: "14px" }}>
           Update the question details and save a new version
         </p>
@@ -182,7 +203,9 @@ export default function EditQuestion({ questionId, questionData, onBack, onSave 
               style={{ borderRadius: "6px", padding: "8px", border: "1px solid #ccc" }}
             >
               {difficultyOptions.map((opt) => (
-                <option key={opt} value={opt}>{opt}</option>
+                <option key={opt} value={opt}>
+                  {opt}
+                </option>
               ))}
             </select>
 
@@ -193,7 +216,9 @@ export default function EditQuestion({ questionId, questionData, onBack, onSave 
               style={{ borderRadius: "6px", padding: "8px", border: "1px solid #ccc" }}
             >
               {questionTypeOptions.map((opt) => (
-                <option key={opt} value={opt}>{opt}</option>
+                <option key={opt} value={opt}>
+                  {opt}
+                </option>
               ))}
             </select>
 
@@ -229,7 +254,9 @@ export default function EditQuestion({ questionId, questionData, onBack, onSave 
 
             <div style={{ display: "flex", gap: "10px", marginTop: "16px" }}>
               <Button onClick={handleSave}>Save / Upload New Version</Button>
-              <Button variant="secondary" onClick={onBack}>Cancel</Button>
+              <Button variant="secondary" onClick={handleCancel}>
+                Cancel
+              </Button>
             </div>
           </div>
         </CardContent>
@@ -265,7 +292,7 @@ export default function EditQuestion({ questionId, questionData, onBack, onSave 
           >
             <DialogHeader>
               <DialogTitle style={{ color: "white", fontWeight: "600" }}>
-                {modalType === "success" ? "Upload Successful" : "Upload Failed"}
+                {modalType === "success" ? "Upload Successful" : "Upload Failed / Cancelled"}
               </DialogTitle>
               <DialogDescription style={{ color: "white", whiteSpace: "pre-line" }}>
                 {modalMessage}
@@ -293,5 +320,4 @@ export default function EditQuestion({ questionId, questionData, onBack, onSave 
       </Dialog>
     </>
   );
-
 }
