@@ -1,0 +1,455 @@
+
+A module that was compiled using NumPy 1.x cannot be run in
+NumPy 2.3.2 as it may crash. To support both 1.x and 2.x
+versions of NumPy, modules must be compiled with NumPy 2.0.
+Some module may need to rebuild instead e.g. with 'pybind11>=2.12'.
+
+If you are a user of the module, the easiest solution will be to
+downgrade to 'numpy<2' or try to upgrade the affected module.
+We expect that some modules will need time to support NumPy 2.
+
+Traceback (most recent call last):  File "/Users/faithyeo/Documents/Y4S1/DSA3101/dsa3101-2510-quiz-02/backend/quizbank-db/scripts/init_db.py", line 515, in <module>
+    main()
+  File "/Users/faithyeo/Documents/Y4S1/DSA3101/dsa3101-2510-quiz-02/backend/quizbank-db/scripts/init_db.py", line 465, in main
+    try_convert_xlsx_to_csv()
+  File "/Users/faithyeo/Documents/Y4S1/DSA3101/dsa3101-2510-quiz-02/backend/quizbank-db/scripts/init_db.py", line 170, in try_convert_xlsx_to_csv
+    from xlsx_to_csv import convert_xlsx_to_csv  # type: ignore
+  File "/Users/faithyeo/Documents/Y4S1/DSA3101/dsa3101-2510-quiz-02/backend/quizbank-db/scripts/xlsx_to_csv.py", line 1, in <module>
+    import pandas as pd
+  File "/opt/anaconda3/lib/python3.12/site-packages/pandas/__init__.py", line 49, in <module>
+    from pandas.core.api import (
+  File "/opt/anaconda3/lib/python3.12/site-packages/pandas/core/api.py", line 28, in <module>
+    from pandas.core.arrays import Categorical
+  File "/opt/anaconda3/lib/python3.12/site-packages/pandas/core/arrays/__init__.py", line 1, in <module>
+    from pandas.core.arrays.arrow import ArrowExtensionArray
+  File "/opt/anaconda3/lib/python3.12/site-packages/pandas/core/arrays/arrow/__init__.py", line 5, in <module>
+    from pandas.core.arrays.arrow.array import ArrowExtensionArray
+  File "/opt/anaconda3/lib/python3.12/site-packages/pandas/core/arrays/arrow/array.py", line 52, in <module>
+    from pandas.core import (
+  File "/opt/anaconda3/lib/python3.12/site-packages/pandas/core/ops/__init__.py", line 8, in <module>
+    from pandas.core.ops.array_ops import (
+  File "/opt/anaconda3/lib/python3.12/site-packages/pandas/core/ops/array_ops.py", line 56, in <module>
+    from pandas.core.computation import expressions
+  File "/opt/anaconda3/lib/python3.12/site-packages/pandas/core/computation/expressions.py", line 21, in <module>
+    from pandas.core.computation.check import NUMEXPR_INSTALLED
+  File "/opt/anaconda3/lib/python3.12/site-packages/pandas/core/computation/check.py", line 5, in <module>
+    ne = import_optional_dependency("numexpr", errors="warn")
+  File "/opt/anaconda3/lib/python3.12/site-packages/pandas/compat/_optional.py", line 135, in import_optional_dependency
+    module = importlib.import_module(name)
+  File "/opt/anaconda3/lib/python3.12/importlib/__init__.py", line 90, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+  File "/opt/anaconda3/lib/python3.12/site-packages/numexpr/__init__.py", line 24, in <module>
+    from numexpr.interpreter import MAX_THREADS, use_vml, __BLOCK_SIZE1__
+Traceback (most recent call last):
+  File "/Users/faithyeo/Documents/Y4S1/DSA3101/dsa3101-2510-quiz-02/backend/quizbank-db/scripts/init_db.py", line 166, in try_convert_xlsx_to_csv
+    from .xlsx_to_csv import convert_xlsx_to_csv  # type: ignore
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ImportError: attempted relative import with no known parent package
+
+During handling of the above exception, another exception occurred:
+
+AttributeError: _ARRAY_API not found
+
+A module that was compiled using NumPy 1.x cannot be run in
+NumPy 2.3.2 as it may crash. To support both 1.x and 2.x
+versions of NumPy, modules must be compiled with NumPy 2.0.
+Some module may need to rebuild instead e.g. with 'pybind11>=2.12'.
+
+If you are a user of the module, the easiest solution will be to
+downgrade to 'numpy<2' or try to upgrade the affected module.
+We expect that some modules will need time to support NumPy 2.
+
+Traceback (most recent call last):  File "/Users/faithyeo/Documents/Y4S1/DSA3101/dsa3101-2510-quiz-02/backend/quizbank-db/scripts/init_db.py", line 515, in <module>
+    main()
+  File "/Users/faithyeo/Documents/Y4S1/DSA3101/dsa3101-2510-quiz-02/backend/quizbank-db/scripts/init_db.py", line 465, in main
+    try_convert_xlsx_to_csv()
+  File "/Users/faithyeo/Documents/Y4S1/DSA3101/dsa3101-2510-quiz-02/backend/quizbank-db/scripts/init_db.py", line 170, in try_convert_xlsx_to_csv
+    from xlsx_to_csv import convert_xlsx_to_csv  # type: ignore
+  File "/Users/faithyeo/Documents/Y4S1/DSA3101/dsa3101-2510-quiz-02/backend/quizbank-db/scripts/xlsx_to_csv.py", line 1, in <module>
+    import pandas as pd
+  File "/opt/anaconda3/lib/python3.12/site-packages/pandas/__init__.py", line 49, in <module>
+    from pandas.core.api import (
+  File "/opt/anaconda3/lib/python3.12/site-packages/pandas/core/api.py", line 28, in <module>
+    from pandas.core.arrays import Categorical
+  File "/opt/anaconda3/lib/python3.12/site-packages/pandas/core/arrays/__init__.py", line 1, in <module>
+    from pandas.core.arrays.arrow import ArrowExtensionArray
+  File "/opt/anaconda3/lib/python3.12/site-packages/pandas/core/arrays/arrow/__init__.py", line 5, in <module>
+    from pandas.core.arrays.arrow.array import ArrowExtensionArray
+  File "/opt/anaconda3/lib/python3.12/site-packages/pandas/core/arrays/arrow/array.py", line 66, in <module>
+    from pandas.core.arrays.masked import BaseMaskedArray
+  File "/opt/anaconda3/lib/python3.12/site-packages/pandas/core/arrays/masked.py", line 61, in <module>
+    from pandas.core import (
+  File "/opt/anaconda3/lib/python3.12/site-packages/pandas/core/nanops.py", line 52, in <module>
+    bn = import_optional_dependency("bottleneck", errors="warn")
+  File "/opt/anaconda3/lib/python3.12/site-packages/pandas/compat/_optional.py", line 135, in import_optional_dependency
+    module = importlib.import_module(name)
+  File "/opt/anaconda3/lib/python3.12/importlib/__init__.py", line 90, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+  File "/opt/anaconda3/lib/python3.12/site-packages/bottleneck/__init__.py", line 7, in <module>
+    from .move import (move_argmax, move_argmin, move_max, move_mean, move_median,
+Traceback (most recent call last):
+  File "/Users/faithyeo/Documents/Y4S1/DSA3101/dsa3101-2510-quiz-02/backend/quizbank-db/scripts/init_db.py", line 166, in try_convert_xlsx_to_csv
+    from .xlsx_to_csv import convert_xlsx_to_csv  # type: ignore
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ImportError: attempted relative import with no known parent package
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/opt/anaconda3/lib/python3.12/site-packages/numpy/core/_multiarray_umath.py", line 46, in __getattr__
+    raise ImportError(msg)
+ImportError: 
+A module that was compiled using NumPy 1.x cannot be run in
+NumPy 2.3.2 as it may crash. To support both 1.x and 2.x
+versions of NumPy, modules must be compiled with NumPy 2.0.
+Some module may need to rebuild instead e.g. with 'pybind11>=2.12'.
+
+If you are a user of the module, the easiest solution will be to
+downgrade to 'numpy<2' or try to upgrade the affected module.
+We expect that some modules will need time to support NumPy 2.
+
+
+
+==============================
+📦 Initializing QuizBank DB
+==============================
+
+🧾 Converting XLSX → CSV...
+Reading from: /Users/faithyeo/Documents/Y4S1/DSA3101/dsa3101-2510-quiz-02/backend/data
+Writing to:   /Users/faithyeo/Documents/Y4S1/DSA3101/dsa3101-2510-quiz-02/backend/quizbank-db/db-init/data
+📘 Processing DSA1101_Sem1_2425_Quiz3.xlsx ...
+✅ Saved: DSA1101_Sem1_2425_Quiz3_context.csv
+✅ Saved: DSA1101_Sem1_2425_Quiz3_questions.csv
+📘 Processing DSA1101_Sem1_2425_Quiz2.xlsx ...
+✅ Saved: DSA1101_Sem1_2425_Quiz2_context.csv
+✅ Saved: DSA1101_Sem1_2425_Quiz2_questions.csv
+📘 Processing DSA1101_Sem1_2425_Quiz5.xlsx ...
+✅ Saved: DSA1101_Sem1_2425_Quiz5_context.csv
+✅ Saved: DSA1101_Sem1_2425_Quiz5_questions.csv
+📘 Processing Template_Questions.xlsx ...
+✅ Saved: Template_Questions_context.csv
+✅ Saved: Template_Questions_questions.csv
+📘 Processing ST2131_Questions.xlsx ...
+✅ Saved: ST2131_Questions_context.csv
+✅ Saved: ST2131_Questions_questions.csv
+📘 Processing ST1131_Quiz1.xlsx ...
+✅ Saved: ST1131_Quiz1_context.csv
+✅ Saved: ST1131_Quiz1_questions.csv
+📘 Processing DSA1101_Sem1_2425_Quiz8.xlsx ...
+✅ Saved: DSA1101_Sem1_2425_Quiz8_context.csv
+✅ Saved: DSA1101_Sem1_2425_Quiz8_questions.csv
+📘 Processing DSA1101_Sem1_2425_Quiz4.xlsx ...
+✅ Saved: DSA1101_Sem1_2425_Quiz4_context.csv
+✅ Saved: DSA1101_Sem1_2425_Quiz4_questions.csv
+📘 Processing IND5003_Regression.xlsx ...
+✅ Saved: IND5003_Regression_context.csv
+✅ Saved: IND5003_Regression_questions.csv
+📘 Processing ST2137_Questions.xlsx ...
+✅ Saved: ST2137_Questions_context.csv
+✅ Saved: ST2137_Questions_questions.csv
+📘 Processing IND5003_Supervised.xlsx ...
+✅ Saved: IND5003_Supervised_context.csv
+✅ Saved: IND5003_Supervised_questions.csv
+📘 Processing DSA1101_Sem1_2425_Quiz7.xlsx ...
+✅ Saved: DSA1101_Sem1_2425_Quiz7_context.csv
+✅ Saved: DSA1101_Sem1_2425_Quiz7_questions.csv
+📘 Processing ST1131_Quiz2.xlsx ...
+✅ Saved: ST1131_Quiz2_context.csv
+✅ Saved: ST1131_Quiz2_questions.csv
+📘 Processing IND5003_Simulation.xlsx ...
+✅ Saved: IND5003_Simulation_context.csv
+✅ Saved: IND5003_Simulation_questions.csv
+📘 Processing DSA1101_Sem1_2425_Quiz6.xlsx ...
+✅ Saved: DSA1101_Sem1_2425_Quiz6_context.csv
+✅ Saved: DSA1101_Sem1_2425_Quiz6_questions.csv
+📘 Processing DSA1101_Sem1_2425_Final.xlsx ...
+✅ Saved: DSA1101_Sem1_2425_Final_context.csv
+✅ Saved: DSA1101_Sem1_2425_Final_questions.csv
+📘 Processing DSA1101_Sem1_2425_Quiz1.xlsx ...
+✅ Saved: DSA1101_Sem1_2425_Quiz1_context.csv
+✅ Saved: DSA1101_Sem1_2425_Quiz1_questions.csv
+📘 Processing DSA1101_Sem1_2425_Midterm.xlsx ...
+✅ Saved: DSA1101_Sem1_2425_Midterm_context.csv
+✅ Saved: DSA1101_Sem1_2425_Midterm_questions.csv
+
+🎉 All Excel sheets converted successfully!
+✅ XLSX conversion complete.
+
+⏳ Waiting for database connection...
+2025-10-23 10:59:03,793 INFO sqlalchemy.engine.Engine select pg_catalog.version()
+2025-10-23 10:59:03,793 INFO sqlalchemy.engine.Engine [raw sql] {}
+2025-10-23 10:59:03,794 INFO sqlalchemy.engine.Engine select current_schema()
+2025-10-23 10:59:03,794 INFO sqlalchemy.engine.Engine [raw sql] {}
+2025-10-23 10:59:03,796 INFO sqlalchemy.engine.Engine show standard_conforming_strings
+2025-10-23 10:59:03,796 INFO sqlalchemy.engine.Engine [raw sql] {}
+2025-10-23 10:59:03,796 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2025-10-23 10:59:03,797 INFO sqlalchemy.engine.Engine SELECT 1
+2025-10-23 10:59:03,797 INFO sqlalchemy.engine.Engine [generated in 0.00006s] {}
+2025-10-23 10:59:03,797 INFO sqlalchemy.engine.Engine ROLLBACK
+✅ Database connected.
+
+2025-10-23 10:59:03,798 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2025-10-23 10:59:03,798 INFO sqlalchemy.engine.Engine SELECT to_regclass(%(r)s)
+2025-10-23 10:59:03,798 INFO sqlalchemy.engine.Engine [generated in 0.00004s] {'r': 'public.courses'}
+2025-10-23 10:59:03,799 INFO sqlalchemy.engine.Engine SELECT to_regclass(%(r)s)
+2025-10-23 10:59:03,799 INFO sqlalchemy.engine.Engine [cached since 0.001264s ago] {'r': 'public.questions'}
+2025-10-23 10:59:03,800 INFO sqlalchemy.engine.Engine 
+        SELECT 1
+        FROM pg_constraint c
+        JOIN pg_class t ON t.oid = c.conrelid
+        WHERE t.relname = %(t)s AND c.conname = %(c)s
+        LIMIT 1
+    
+2025-10-23 10:59:03,800 INFO sqlalchemy.engine.Engine [generated in 0.00004s] {'t': 'questions', 'c': 'fk_questions_previous'}
+2025-10-23 10:59:03,802 INFO sqlalchemy.engine.Engine 
+        SELECT 1
+        FROM pg_constraint c
+        JOIN pg_class t ON t.oid = c.conrelid
+        WHERE t.relname = %(t)s AND c.conname = %(c)s
+        LIMIT 1
+    
+2025-10-23 10:59:03,802 INFO sqlalchemy.engine.Engine [cached since 0.001902s ago] {'t': 'questions', 'c': 'fk_questions_original'}
+2025-10-23 10:59:03,803 INFO sqlalchemy.engine.Engine 
+        SELECT 1
+        FROM pg_constraint c
+        JOIN pg_class t ON t.oid = c.conrelid
+        WHERE t.relname = %(t)s AND c.conname = %(c)s
+        LIMIT 1
+    
+2025-10-23 10:59:03,803 INFO sqlalchemy.engine.Engine [cached since 0.002667s ago] {'t': 'questions', 'c': 'chk_prev_not_self'}
+2025-10-23 10:59:03,803 INFO sqlalchemy.engine.Engine 
+        SELECT 1
+        FROM pg_constraint c
+        JOIN pg_class t ON t.oid = c.conrelid
+        WHERE t.relname = %(t)s AND c.conname = %(c)s
+        LIMIT 1
+    
+2025-10-23 10:59:03,803 INFO sqlalchemy.engine.Engine [cached since 0.003479s ago] {'t': 'questions', 'c': 'chk_orig_not_self'}
+2025-10-23 10:59:03,804 INFO sqlalchemy.engine.Engine COMMIT
+2025-10-23 10:59:03,804 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2025-10-23 10:59:03,804 INFO sqlalchemy.engine.Engine 
+        CREATE TABLE IF NOT EXISTS system_meta (
+            key   TEXT PRIMARY KEY,
+            value TEXT
+        )
+    
+2025-10-23 10:59:03,804 INFO sqlalchemy.engine.Engine [generated in 0.00004s] {}
+2025-10-23 10:59:03,805 INFO sqlalchemy.engine.Engine COMMIT
+2025-10-23 10:59:03,806 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2025-10-23 10:59:03,806 INFO sqlalchemy.engine.Engine SELECT value FROM system_meta WHERE key='seeded_by_python' LIMIT 1
+2025-10-23 10:59:03,806 INFO sqlalchemy.engine.Engine [generated in 0.00003s] {}
+📂 Looking for CSVs in: /Users/faithyeo/Documents/Y4S1/DSA3101/dsa3101-2510-quiz-02/backend/quizbank-db/db-init/data
+📥 Loading contexts from 18 files
+2025-10-23 10:59:03,807 INFO sqlalchemy.engine.Engine SELECT course_id FROM courses WHERE course_code=%(c)s LIMIT 1
+2025-10-23 10:59:03,807 INFO sqlalchemy.engine.Engine [generated in 0.00005s] {'c': 'DSA1101'}
+2025-10-23 10:59:03,807 INFO sqlalchemy.engine.Engine 
+          SELECT a.assessment_id
+          FROM assessments a
+          WHERE a.course_id = %(cid)s AND a.assessment_type = %(at)s
+          ORDER BY a.assessment_id LIMIT 1
+        
+2025-10-23 10:59:03,807 INFO sqlalchemy.engine.Engine [generated in 0.00004s] {'cid': 1, 'at': 'Final'}
+2025-10-23 10:59:03,808 INFO sqlalchemy.engine.Engine COMMIT
+  ✅ DSA1101_Sem1_2425_Final_context.csv: 0 contexts (cum), 0 ctx_atts (cum)
+2025-10-23 10:59:03,809 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2025-10-23 10:59:03,809 INFO sqlalchemy.engine.Engine SELECT course_id FROM courses WHERE course_code=%(c)s LIMIT 1
+2025-10-23 10:59:03,809 INFO sqlalchemy.engine.Engine [cached since 0.002024s ago] {'c': 'DSA1101'}
+2025-10-23 10:59:03,809 INFO sqlalchemy.engine.Engine 
+          SELECT a.assessment_id
+          FROM assessments a
+          WHERE a.course_id = %(cid)s AND a.assessment_type = %(at)s
+          ORDER BY a.assessment_id LIMIT 1
+        
+2025-10-23 10:59:03,809 INFO sqlalchemy.engine.Engine [cached since 0.001697s ago] {'cid': 1, 'at': 'Midterm'}
+2025-10-23 10:59:03,810 INFO sqlalchemy.engine.Engine COMMIT
+  ✅ DSA1101_Sem1_2425_Midterm_context.csv: 0 contexts (cum), 0 ctx_atts (cum)
+2025-10-23 10:59:03,810 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2025-10-23 10:59:03,810 INFO sqlalchemy.engine.Engine SELECT course_id FROM courses WHERE course_code=%(c)s LIMIT 1
+2025-10-23 10:59:03,810 INFO sqlalchemy.engine.Engine [cached since 0.003231s ago] {'c': 'DSA1101'}
+2025-10-23 10:59:03,810 INFO sqlalchemy.engine.Engine 
+          SELECT a.assessment_id
+          FROM assessments a
+          WHERE a.course_id = %(cid)s AND a.assessment_type = %(at)s
+          ORDER BY a.assessment_id LIMIT 1
+        
+2025-10-23 10:59:03,810 INFO sqlalchemy.engine.Engine [cached since 0.002882s ago] {'cid': 1, 'at': 'Quiz1'}
+2025-10-23 10:59:03,811 INFO sqlalchemy.engine.Engine COMMIT
+  ✅ DSA1101_Sem1_2425_Quiz1_context.csv: 0 contexts (cum), 0 ctx_atts (cum)
+2025-10-23 10:59:03,811 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2025-10-23 10:59:03,811 INFO sqlalchemy.engine.Engine SELECT course_id FROM courses WHERE course_code=%(c)s LIMIT 1
+2025-10-23 10:59:03,811 INFO sqlalchemy.engine.Engine [cached since 0.004365s ago] {'c': 'DSA1101'}
+2025-10-23 10:59:03,811 INFO sqlalchemy.engine.Engine 
+          SELECT a.assessment_id
+          FROM assessments a
+          WHERE a.course_id = %(cid)s AND a.assessment_type = %(at)s
+          ORDER BY a.assessment_id LIMIT 1
+        
+2025-10-23 10:59:03,811 INFO sqlalchemy.engine.Engine [cached since 0.004014s ago] {'cid': 1, 'at': 'Quiz2'}
+2025-10-23 10:59:03,812 INFO sqlalchemy.engine.Engine COMMIT
+  ✅ DSA1101_Sem1_2425_Quiz2_context.csv: 0 contexts (cum), 0 ctx_atts (cum)
+2025-10-23 10:59:03,812 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2025-10-23 10:59:03,812 INFO sqlalchemy.engine.Engine SELECT course_id FROM courses WHERE course_code=%(c)s LIMIT 1
+2025-10-23 10:59:03,812 INFO sqlalchemy.engine.Engine [cached since 0.005525s ago] {'c': 'DSA1101'}
+2025-10-23 10:59:03,813 INFO sqlalchemy.engine.Engine 
+          SELECT a.assessment_id
+          FROM assessments a
+          WHERE a.course_id = %(cid)s AND a.assessment_type = %(at)s
+          ORDER BY a.assessment_id LIMIT 1
+        
+2025-10-23 10:59:03,813 INFO sqlalchemy.engine.Engine [cached since 0.005208s ago] {'cid': 1, 'at': 'Quiz3'}
+2025-10-23 10:59:03,813 INFO sqlalchemy.engine.Engine COMMIT
+  ✅ DSA1101_Sem1_2425_Quiz3_context.csv: 0 contexts (cum), 0 ctx_atts (cum)
+2025-10-23 10:59:03,813 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2025-10-23 10:59:03,813 INFO sqlalchemy.engine.Engine SELECT course_id FROM courses WHERE course_code=%(c)s LIMIT 1
+2025-10-23 10:59:03,813 INFO sqlalchemy.engine.Engine [cached since 0.006716s ago] {'c': 'DSA1101'}
+2025-10-23 10:59:03,814 INFO sqlalchemy.engine.Engine 
+          SELECT a.assessment_id
+          FROM assessments a
+          WHERE a.course_id = %(cid)s AND a.assessment_type = %(at)s
+          ORDER BY a.assessment_id LIMIT 1
+        
+2025-10-23 10:59:03,814 INFO sqlalchemy.engine.Engine [cached since 0.006384s ago] {'cid': 1, 'at': 'Quiz4'}
+2025-10-23 10:59:03,814 INFO sqlalchemy.engine.Engine COMMIT
+  ✅ DSA1101_Sem1_2425_Quiz4_context.csv: 0 contexts (cum), 0 ctx_atts (cum)
+2025-10-23 10:59:03,814 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2025-10-23 10:59:03,815 INFO sqlalchemy.engine.Engine SELECT course_id FROM courses WHERE course_code=%(c)s LIMIT 1
+2025-10-23 10:59:03,815 INFO sqlalchemy.engine.Engine [cached since 0.007912s ago] {'c': 'DSA1101'}
+2025-10-23 10:59:03,815 INFO sqlalchemy.engine.Engine 
+          SELECT a.assessment_id
+          FROM assessments a
+          WHERE a.course_id = %(cid)s AND a.assessment_type = %(at)s
+          ORDER BY a.assessment_id LIMIT 1
+        
+2025-10-23 10:59:03,815 INFO sqlalchemy.engine.Engine [cached since 0.007606s ago] {'cid': 1, 'at': 'Quiz5'}
+2025-10-23 10:59:03,815 INFO sqlalchemy.engine.Engine COMMIT
+  ✅ DSA1101_Sem1_2425_Quiz5_context.csv: 0 contexts (cum), 0 ctx_atts (cum)
+2025-10-23 10:59:03,816 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2025-10-23 10:59:03,816 INFO sqlalchemy.engine.Engine SELECT course_id FROM courses WHERE course_code=%(c)s LIMIT 1
+2025-10-23 10:59:03,816 INFO sqlalchemy.engine.Engine [cached since 0.009104s ago] {'c': 'DSA1101'}
+2025-10-23 10:59:03,816 INFO sqlalchemy.engine.Engine 
+          SELECT a.assessment_id
+          FROM assessments a
+          WHERE a.course_id = %(cid)s AND a.assessment_type = %(at)s
+          ORDER BY a.assessment_id LIMIT 1
+        
+2025-10-23 10:59:03,816 INFO sqlalchemy.engine.Engine [cached since 0.008811s ago] {'cid': 1, 'at': 'Quiz6'}
+2025-10-23 10:59:03,817 INFO sqlalchemy.engine.Engine COMMIT
+  ✅ DSA1101_Sem1_2425_Quiz6_context.csv: 0 contexts (cum), 0 ctx_atts (cum)
+2025-10-23 10:59:03,817 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2025-10-23 10:59:03,817 INFO sqlalchemy.engine.Engine SELECT course_id FROM courses WHERE course_code=%(c)s LIMIT 1
+2025-10-23 10:59:03,817 INFO sqlalchemy.engine.Engine [cached since 0.01044s ago] {'c': 'DSA1101'}
+2025-10-23 10:59:03,818 INFO sqlalchemy.engine.Engine 
+          SELECT a.assessment_id
+          FROM assessments a
+          WHERE a.course_id = %(cid)s AND a.assessment_type = %(at)s
+          ORDER BY a.assessment_id LIMIT 1
+        
+2025-10-23 10:59:03,818 INFO sqlalchemy.engine.Engine [cached since 0.01009s ago] {'cid': 1, 'at': 'Quiz7'}
+2025-10-23 10:59:03,818 INFO sqlalchemy.engine.Engine COMMIT
+  ✅ DSA1101_Sem1_2425_Quiz7_context.csv: 0 contexts (cum), 0 ctx_atts (cum)
+2025-10-23 10:59:03,818 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2025-10-23 10:59:03,818 INFO sqlalchemy.engine.Engine SELECT course_id FROM courses WHERE course_code=%(c)s LIMIT 1
+2025-10-23 10:59:03,818 INFO sqlalchemy.engine.Engine [cached since 0.01164s ago] {'c': 'DSA1101'}
+2025-10-23 10:59:03,819 INFO sqlalchemy.engine.Engine 
+          SELECT a.assessment_id
+          FROM assessments a
+          WHERE a.course_id = %(cid)s AND a.assessment_type = %(at)s
+          ORDER BY a.assessment_id LIMIT 1
+        
+2025-10-23 10:59:03,819 INFO sqlalchemy.engine.Engine [cached since 0.01126s ago] {'cid': 1, 'at': 'Quiz8'}
+2025-10-23 10:59:03,819 INFO sqlalchemy.engine.Engine COMMIT
+  ✅ DSA1101_Sem1_2425_Quiz8_context.csv: 0 contexts (cum), 0 ctx_atts (cum)
+2025-10-23 10:59:03,819 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2025-10-23 10:59:03,819 INFO sqlalchemy.engine.Engine SELECT course_id FROM courses WHERE course_code=%(c)s LIMIT 1
+2025-10-23 10:59:03,819 INFO sqlalchemy.engine.Engine [cached since 0.01271s ago] {'c': 'IND5003'}
+2025-10-23 10:59:03,820 INFO sqlalchemy.engine.Engine 
+          SELECT a.assessment_id
+          FROM assessments a
+          WHERE a.course_id = %(cid)s AND a.assessment_type = %(at)s
+          ORDER BY a.assessment_id LIMIT 1
+        
+2025-10-23 10:59:03,820 INFO sqlalchemy.engine.Engine [cached since 0.01233s ago] {'cid': 2, 'at': 'Regression'}
+2025-10-23 10:59:03,820 INFO sqlalchemy.engine.Engine COMMIT
+  ✅ IND5003_Regression_context.csv: 0 contexts (cum), 0 ctx_atts (cum)
+2025-10-23 10:59:03,820 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2025-10-23 10:59:03,820 INFO sqlalchemy.engine.Engine SELECT course_id FROM courses WHERE course_code=%(c)s LIMIT 1
+2025-10-23 10:59:03,820 INFO sqlalchemy.engine.Engine [cached since 0.01375s ago] {'c': 'IND5003'}
+2025-10-23 10:59:03,821 INFO sqlalchemy.engine.Engine 
+          SELECT a.assessment_id
+          FROM assessments a
+          WHERE a.course_id = %(cid)s AND a.assessment_type = %(at)s
+          ORDER BY a.assessment_id LIMIT 1
+        
+2025-10-23 10:59:03,821 INFO sqlalchemy.engine.Engine [cached since 0.01332s ago] {'cid': 2, 'at': 'Simulation'}
+2025-10-23 10:59:03,821 INFO sqlalchemy.engine.Engine COMMIT
+  ✅ IND5003_Simulation_context.csv: 0 contexts (cum), 0 ctx_atts (cum)
+2025-10-23 10:59:03,821 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2025-10-23 10:59:03,821 INFO sqlalchemy.engine.Engine SELECT course_id FROM courses WHERE course_code=%(c)s LIMIT 1
+2025-10-23 10:59:03,821 INFO sqlalchemy.engine.Engine [cached since 0.01466s ago] {'c': 'IND5003'}
+2025-10-23 10:59:03,822 INFO sqlalchemy.engine.Engine 
+          SELECT a.assessment_id
+          FROM assessments a
+          WHERE a.course_id = %(cid)s AND a.assessment_type = %(at)s
+          ORDER BY a.assessment_id LIMIT 1
+        
+2025-10-23 10:59:03,822 INFO sqlalchemy.engine.Engine [cached since 0.0142s ago] {'cid': 2, 'at': 'Supervised'}
+2025-10-23 10:59:03,822 INFO sqlalchemy.engine.Engine COMMIT
+  ✅ IND5003_Supervised_context.csv: 0 contexts (cum), 0 ctx_atts (cum)
+2025-10-23 10:59:03,822 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2025-10-23 10:59:03,822 INFO sqlalchemy.engine.Engine SELECT course_id FROM courses WHERE course_code=%(c)s LIMIT 1
+2025-10-23 10:59:03,822 INFO sqlalchemy.engine.Engine [cached since 0.01565s ago] {'c': 'ST1131'}
+2025-10-23 10:59:03,823 INFO sqlalchemy.engine.Engine 
+          SELECT a.assessment_id
+          FROM assessments a
+          WHERE a.course_id = %(cid)s AND a.assessment_type = %(at)s
+          ORDER BY a.assessment_id LIMIT 1
+        
+2025-10-23 10:59:03,823 INFO sqlalchemy.engine.Engine [cached since 0.01535s ago] {'cid': 3, 'at': 'Quiz1'}
+2025-10-23 10:59:03,823 INFO sqlalchemy.engine.Engine COMMIT
+  ✅ ST1131_Quiz1_context.csv: 0 contexts (cum), 0 ctx_atts (cum)
+2025-10-23 10:59:03,823 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2025-10-23 10:59:03,823 INFO sqlalchemy.engine.Engine SELECT course_id FROM courses WHERE course_code=%(c)s LIMIT 1
+2025-10-23 10:59:03,823 INFO sqlalchemy.engine.Engine [cached since 0.01675s ago] {'c': 'ST1131'}
+2025-10-23 10:59:03,824 INFO sqlalchemy.engine.Engine 
+          SELECT a.assessment_id
+          FROM assessments a
+          WHERE a.course_id = %(cid)s AND a.assessment_type = %(at)s
+          ORDER BY a.assessment_id LIMIT 1
+        
+2025-10-23 10:59:03,824 INFO sqlalchemy.engine.Engine [cached since 0.01636s ago] {'cid': 3, 'at': 'Quiz2'}
+2025-10-23 10:59:03,824 INFO sqlalchemy.engine.Engine COMMIT
+  ✅ ST1131_Quiz2_context.csv: 0 contexts (cum), 0 ctx_atts (cum)
+2025-10-23 10:59:03,824 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2025-10-23 10:59:03,824 INFO sqlalchemy.engine.Engine SELECT course_id FROM courses WHERE course_code=%(c)s LIMIT 1
+2025-10-23 10:59:03,824 INFO sqlalchemy.engine.Engine [cached since 0.01782s ago] {'c': 'ST2131'}
+2025-10-23 10:59:03,825 INFO sqlalchemy.engine.Engine 
+          SELECT a.assessment_id
+          FROM assessments a
+          WHERE a.course_id = %(cid)s AND a.assessment_type = %(at)s
+          ORDER BY a.assessment_id LIMIT 1
+        
+2025-10-23 10:59:03,825 INFO sqlalchemy.engine.Engine [cached since 0.01748s ago] {'cid': 4, 'at': 'Questions'}
+2025-10-23 10:59:03,825 INFO sqlalchemy.engine.Engine COMMIT
+  ✅ ST2131_Questions_context.csv: 0 contexts (cum), 0 ctx_atts (cum)
+2025-10-23 10:59:03,826 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2025-10-23 10:59:03,826 INFO sqlalchemy.engine.Engine SELECT course_id FROM courses WHERE course_code=%(c)s LIMIT 1
+2025-10-23 10:59:03,826 INFO sqlalchemy.engine.Engine [cached since 0.01912s ago] {'c': 'ST2137'}
+2025-10-23 10:59:03,826 INFO sqlalchemy.engine.Engine 
+          SELECT a.assessment_id
+          FROM assessments a
+          WHERE a.course_id = %(cid)s AND a.assessment_type = %(at)s
+          ORDER BY a.assessment_id LIMIT 1
+        
+2025-10-23 10:59:03,826 INFO sqlalchemy.engine.Engine [cached since 0.01875s ago] {'cid': 5, 'at': 'Questions'}
+2025-10-23 10:59:03,827 INFO sqlalchemy.engine.Engine COMMIT
+  ✅ ST2137_Questions_context.csv: 0 contexts (cum), 0 ctx_atts (cum)
+  ⚠️  Skip (unmatched name): Template_Questions_context.csv
+✅ Contexts upserted: 0, context attachments: 0
+❌ Initialization failed: cannot unpack non-iterable NoneType object
+Traceback (most recent call last):
+  File "/Users/faithyeo/Documents/Y4S1/DSA3101/dsa3101-2510-quiz-02/backend/quizbank-db/scripts/init_db.py", line 515, in <module>
+    main()
+  File "/Users/faithyeo/Documents/Y4S1/DSA3101/dsa3101-2510-quiz-02/backend/quizbank-db/scripts/init_db.py", line 486, in main
+    ctx_n, ctx_att_n = load_contexts_from_csvs(session, DATA_DIR)
+    ^^^^^^^^^^^^^^^^
+TypeError: cannot unpack non-iterable NoneType object

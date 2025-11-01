@@ -1,0 +1,103 @@
+Context ID,Question Number,Sub-Question Number,Question Text,Question Type,Option A,Option B,Option C,Option D,Option E,Correct Answer,Explanation,Points,Difficulty,Concepts,Attachment
+,3,,In which of the following situations is simulation modeling appropriate?,MCQ,"A company wants to understand if a customer will churn (i.e. take his/her business elsewhere), using historical customer behavior.",A hospital is exploring the impact of different staffing levels on wait times in the emergency room during peak hours.,"A retail chain wants to identify subsets of customers based on purchasing patterns, in order to offer more personalized marketing strategies to these groups.",A company is assessing how different weather patterns might affect delivery times with the aim to adjust their shipping/routing strategies accordingly.,,"B, D","A Incorrect: Supervised learning.
+B Correct: Simulation modeling (exploring staffing levels and their impact on wait times).
+C Incorrect: Unsupervised learning (grouping customers based on purchasing patterns without labels).
+D Correct: Simulation modeling (assessing how weather affects delivery times).",,Low,"Simulation Modeling, Supervised Learning, Unsupervised Learning",
+,4,,"An analyst working for a ride-sharing company wants to estimate the average waiting time for passengers during peak hours. The analyst intends to use simulation modeling to understand how different factors such as the number of available drivers, traffic conditions, and demand for rides, affect waiting times over the course of a week.
+
+As the analyst *prepares to run this simulation*, what **specific** data should they collect to calibrate the model accurately? ",SRQ,,,,,,"Here are some possible suggestions:
+
+1. Passenger demand during peak hours (e.g., number of ride requests per hour).
+2. Number of drivers available during peak hours.
+3. Traffic condition data during peak hours (e.g., average speed or congestion levels).
+4. Average time it takes for drivers to reach passengers based on different 
+   locations in the city.
+5. Variability in response times due to weather conditions or special events.
+6. Cancellation rates (both passenger and driver).",,,Med,"Simulation Modeling, Data Manipulation",
+,5,,"An analyst at an airline company wishes to estimate how often passengers will need to wait for available check-in counters during peak travel seasons. The analyst plans to run a simulation to understand the relationship between the number of open counters, the passenger arrival rate, and the average time each passenger spends at the counter.
+
+What data should the analyst collect before implementing the solution?",SRQ,,,,,,"Here are some possible suggestions:
+
+1. Passenger arrival rates during peak travel times (e.g., how many passengers arrive per hour).
+2. Number of check-in counters open at different times of day. 
+3. Average time a passenger spends at the counter (e.g., check-in process time).
+4. Variations due to different passenger types (e.g., business, economy, families).",,,Med,"Simulation Modeling, Data Manipulation",
+,6,,"A healthcare analyst wants to estimate the average time patients spend in the emergency room before being seen by a doctor. The analyst plans to simulate patient flow to understand how the number of doctors on duty, patient arrival rates, and the complexity of each case impact wait times.
+
+What data should the analyst collect before implementing the solution?",SRQ,,,,,,"Here are some possible suggestions:
+
+1. Patient arrival rates at the emergency room during different times of day and week.
+2. Number of doctors available during various shifts.
+3. Average time doctors spend with each patient, based on case complexity.
+4. Patient triage data to understand the severity of cases and how it affects processing time.
+5. Time patients spend in other stages of the ER (e.g., registration, initial evaluation).
+6. Any seasonal factors (e.g., flu season) or special events that impact patient arrival rates.",,,Med,"Simulation Modeling, Data Manipulation",
+,7,,"A clinic takes on bookings and allocates patients to therapists according to a schedule. However, sometimes a patient cancels on short notice. The clinic would
+like to figure out an optimal strategy that maintains a high utilisation rate of therapists, while affording them decent breaks and rest time, and a short waiting time for patients. What data would you collect prior to the modeling, and what metrics would you extract using the data collector?",SRQ,,,,,,"Data to Collect:
+
+1. Historical Booking Data:
+    Number of patient bookings per day and per therapist.
+    Time slots allocated for each patient session.
+    Frequency and timing of last-minute cancellations (e.g., within 24 hours or less).
+    No-show rates for patients.
+
+2. Therapist Availability and Schedule:
+    Daily and weekly work schedules for each therapist.
+    Therapist preferences or limits on the number of sessions they can handle per day or week.
+    Duration of therapist breaks between sessions.
+
+3. Patient Data:
+    Average waiting time for patients between booking and the actual appointment.
+    Frequency of rescheduling by patients due to therapist unavailability.
+    Specific patient preferences for therapists (if any).
+
+4. Session Duration and Types:
+    Average duration of therapy sessions by type (e.g., physical therapy, counseling).
+    Variability in session lengths (e.g., some sessions running longer or shorter than expected).
+
+5. Cancellation Patterns:
+    Patterns of cancellation across days of the week, times of day, or specific patients.
+    The reasons provided for cancellations.
+
+6. Therapist Utilization:
+    Number of sessions per therapist each day/week.
+    Idle time between sessions for each therapist.
+    Therapist satisfaction data, if available (to understand the impact of utilization on well-being).
+
+Metrics to Extract:
+
+1. Utilization Rate of Therapists:
+    Percentage of available therapist hours that are used for patient appointments.
+    Time spent by therapists on breaks versus time spent with patients.
+
+2. Cancellation Impact:
+    Frequency of last-minute cancellations and the resulting impact on the therapist's schedule.
+    Time lost to cancellations (e.g., idle time that could not be rebooked).
+    Proportion of canceled slots that are successfully reallocated to other patients.
+
+3. Patient Waiting Time:
+    Average time patients wait between booking and appointment.
+    Variability in patient waiting times depending on cancellation or therapist availability.
+
+4. Therapist Breaks and Rest Time:
+    Average time therapists spend on breaks during a typical workday.
+    Distribution of break time across the day (e.g., short breaks between sessions versus longer midday breaks).
+    The ratio of rest time to session time to ensure therapists have enough downtime.
+
+5. Patient Satisfaction and Session Completion:
+    How cancellation rates and rescheduling affect patient satisfaction or follow-up appointments.
+    Completion rates for patient therapy plans, factoring in cancellations and reschedules.",,,High,"Simulation Modeling, Data Manipulation, Model Validation",
+,8,,"In Python, the following commands can be used to initialise the random number
+generator. Assess if the following statement is true or false.
+
+Random variables *cannot* be generated in Python without explicitly setting the
+seed.
+
+```
+from numpy.random import default_rng
+rng = default_rng(5003)
+```",T/F,True,False,,,,The statement is incorrect. We can always jump straight into generation  without setting the seed; Python will use a function of the timestamp to  set the seed.,,,Low,"Simulation Modeling, Data Manipulation, Basic Concepts in Statistics",
+,10,,Which of the following is a discrete random variable? ,MCQ,The amount of rainfall in a given day.  ,The number of coin tosses until we observe heads.  ,The time taken for a car to travel between two cities.  ,The height of a randomly chosen student. ,,B,"A Continuous
+B will be an integer count, so it is discrete. It could be a very very large number though!
+C is a variable that could be recorded with infinite precision. It is continuous.
+D is also continuous.",,Low,Basic Concepts in Statistics,

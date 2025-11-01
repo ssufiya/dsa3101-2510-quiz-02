@@ -1,0 +1,25 @@
+Context ID,Question Number,Sub-Question Number,Question Text,Question Type,Option A,Option B,Option C,Option D,Option E,Correct Answer,Explanation,Points,Difficulty,Concepts,Attachment
+,1,,A quantitative variable can be categorized into categorical variables.,T/F,True,False,,,,A,,1,Low,"Basic Concepts in Statistics, Data Manipulation",
+,2,,Postal code in Singapore has values that are recorded as numbers so it is a quantitative variable.,T/F,True,False,,,,B,,1,Low,Basic Concepts in Statistics,
+,3,,"A bar plot (bar chart) is often used to visualize a quantitative variable, like height, age or weight.",T/F,True,False,,,,B,,1,Low,"EDA, Basic Concepts in Statistics",
+,4,,A histogram can only portray the frequency of values of a quantitative variable.,T/F,True,False,,,,B,,1,Low,"EDA, Basic Concepts in Statistics",
+,5,,"Given variable height, the shape of the histogram in frequency and the histogram in probability of variable height are the same.",T/F,True,False,,,,A,,1,Low,"EDA, Basic Concepts in Statistics",
+,6,,Which of the following is an appropriate method for summarising ordinal data?,MCQ,Frequency Table,Histogram,,,,A,,1,Low,"Basic Concepts in Statistics, Data Manipulation",
+,7,,"Consider the following dataset of observations:
+0.54, 0.42, 0.85, 1.57, 1.09, 0.75, 1.28, 1.86, 2.51, 1.94
+Which of the following is the correct histogram for this data?
+!(ST1131_Sem2_2425_Quiz1_Figure1.png)",MCQ,a,b,c,d,,B,,1,Low,"EDA, Data Manipulation",ST1131_Sem2_2425_Quiz1_Figure1.png
+,8,,"Variable \""smoking level\"" has 3 levels that has values recorded in numbers (0, 1 and 3), where 0 = “no smoking”, 1 = “<= 5 cigarettes a day” and 3 = “more than 5 cigarettes a day”. It is a categorical variable.",T/F,True,False,,,,A,,1,Low,Basic Concepts in Statistics,
+,9,,"Which of the following variables are continuous, when the measurement is as precise as possible?",MRQ,Age of mother,Number of children in a family,Cooking time for preparing dinner,Latitude of a city,Longtitude of a city,"A, C, D, E",,1,Low,Basic Concepts in Statistics,
+,10,,"Scores on a difficult exam have a mean of 57 and a standard deviation of 20. The instructor boosts all the scores by 20 points before awarding grades. What is the standard deviation of the new boosted scores?"",",SRQ,,,,,,20,,1,Low,"Basic Concepts in Statistics, Data Manipulation",
+,11,,The mean of a sample is always one of the observed values.,T/F,True,False,,,,B,,1,Low,Basic Concepts in Statistics,
+,12,,"The Harvard Medical School study included about 22,000 male physicians. Whether a given individual would be assigned to take aspirin or the placebo was determined by flipping a coin. As a result, about 11,000 physicians were assigned to take aspirin and about 11,000 to take the placebo. The researchers summarized the results of the experiment using percentages. Of the physicians taking aspirin, 0.9% had a heart attack, compared to 1.7% of those taking the placebo. Based on the observed results, the study authors concluded that taking aspirin reduces the risk of having a heart attack. Match the aspect of the study that pertains to descriptive or inferential statistics respectively.
+
+1. The researchers summarized the results... 0.9% had a heart attack, compared to 1.7% of those taking the placebo.
+2. Based on the observed results, the study authors concluded that taking aspirin reduces the risk of having a heart attack.",SRQ,,,,,,"1. Descriptive statistics.
+2. Inferential statistics.",,1,Low,"Basic Concepts in Statistics, Inference",
+,13,,1% of the data are above the first percentile.,T/F,True,False,,,,B,,1,Low,Basic Concepts in Statistics,
+,14,,The inter-quartile range can be viewed as the range for the middle 50% of the data.,T/F,True,False,,,,A,,1,Low,"Basic Concepts in Statistics, EDA",
+,15,,Which of the following measures is/are resistant to outliers?,MRQ,Median,Mean,,,,A,,1,Low,"Basic Concepts in Statistics, EDA",
+,16,,What measures of center and variability are the most appropriate to describe a symmetric distribution?,MRQ,Mean,Median,Interquartile range,Standard deviation,,"A, D",,1,Low,"Basic Concepts in Statistics, EDA",
+,17,,What measures of center and variability are the most appropriate to describe a skewed distribution?,MRQ,Mean,Median,Interquartile range,Standard deviation,,"B, C",,1,Low,"Basic Concepts in Statistics, EDA",
