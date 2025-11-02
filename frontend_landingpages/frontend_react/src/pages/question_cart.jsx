@@ -225,16 +225,6 @@ export function QuestionCart({
               )}
             </div>
 
-            {/* RIGHT BUTTON */}
-            <div>
-              <Button
-                variant="ghost"
-                onClick={handleExportPDF}
-                className="flex items-center space-x-2 text-blue-600 hover:text-blue-700"
-              >
-                <span>Export to PDF</span>
-              </Button>
-            </div>
           </div>
 
           <h1

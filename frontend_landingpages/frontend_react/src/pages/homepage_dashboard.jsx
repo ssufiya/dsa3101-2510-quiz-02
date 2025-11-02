@@ -31,7 +31,9 @@ export function Homepage({
             <div className="flex items-center space-x-3">
               <div className="bg-primary rounded-lg p-2"></div>
               <div>
-                <h1 className="text-xl">Quiz Bank</h1>
+                <h1 className="text-xl" style={{ fontWeight: "600" }}>
+                  Quiz Bank
+                </h1> 
                 <p className="text-sm text-muted-foreground">
                   A portal for managing questions and assessments for Department of Statistics & Data Science
                 </p>
