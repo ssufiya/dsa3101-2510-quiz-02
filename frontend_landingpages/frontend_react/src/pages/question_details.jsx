@@ -45,6 +45,7 @@ export function QuestionDetails({
         const res = await axios.get(
           `http://localhost:5003/api/questions/${questionId}/suggestions?top_n=5`
         );
+        console.log("Fetched suggested variants:", res.data.suggested_variants);
         const suggested = res.data.suggested_variants || [];
         const details = suggested.map((s) => ({
           question_id: s.question_id,
@@ -133,16 +134,14 @@ export function QuestionDetails({
   return (
     <div className="min-h-screen bg-gray-50">
       {/* HEADER */}
-      <header className="bg-white border-gray-200 shadow-sm">
-        <div className="max-w-7xl mx-auto px-6 py-4">
+      <header className="bg-white border-gray-200 shadow-sm" style={{ paddingTop: "24px" }}>
+        <div className="max-w-7xl mx-auto px-6 py-2">
           <div className="flex items-center justify-between">
-            {/* LEFT BUTTON */}
             <Button variant="ghost" onClick={onBack} className="flex items-center space-x-2">
               <ArrowLeft className="h-4 w-4" />
               <span>Back</span>
             </Button>
 
-            {/* RIGHT BUTTON */}
             <Button
               variant="ghost"
               onClick={onGoToQuestionCart}
@@ -153,7 +152,6 @@ export function QuestionDetails({
             </Button>
           </div>
 
-          {/* TITLE */}
           <h1
             className="text-center mt-4 text-xl font-semibold text-gray-800"
             style={{ fontWeight: "600" }}
@@ -163,9 +161,8 @@ export function QuestionDetails({
         </div>
       </header>
 
-      {/* EVERYTHING BELOW UNCHANGED */}
       <main className="max-w-3xl mx-auto px-6 py-10 space-y-10">
-        {/* --- Concepts Section --- */}
+        {/* --- Concepts --- */}
         {Array.isArray(questionData.concepts) && questionData.concepts.length > 0 && (
           <div
             style={{
@@ -223,7 +220,6 @@ export function QuestionDetails({
             </div>
           </div>
 
-          {/* --- Question Box --- */}
           <div className="mb-6">
             <p className="text-gray-800 text-base leading-relaxed mb-4">
               {questionData.question_text}
@@ -330,7 +326,7 @@ export function QuestionDetails({
             <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "32px" }}>
               {similarQuestions.map((q) => (
                 <Card
-                  key={q.question_id}
+                  key={`similar-${q.question_id}`}
                   className="shadow-sm hover:shadow-md transition"
                   style={{ borderRadius: "16px", overflow: "hidden" }}
                 >
@@ -368,7 +364,7 @@ export function QuestionDetails({
                         className="text-sm font-medium text-gray-700 italic"
                         style={{ marginRight: "4px" }}
                       >
-                        {Math.round(q.similarity_score*100)}% match
+                        {Math.round(q.similarity_score * 100)}% match
                       </span>
                     </div>
 
