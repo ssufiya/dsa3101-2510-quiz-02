@@ -12,7 +12,9 @@ In your terminal, run:
 2. cd path/to/dsa3101-2510-quiz-02
 3. _docker compose up --build_
 
-For first time users (After _docker compose up_):
+Troubleshooting for first time users: 
+
+if the database remains empty, run (After _docker compose up_):
 
 _docker exec -it quizbank-backend bash_
 
