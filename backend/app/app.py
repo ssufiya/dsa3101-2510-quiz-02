@@ -1723,7 +1723,7 @@ async def upload_assessment(file: UploadFile = File(...), db: Session = Depends(
                         metadata = {
                             'course_code': course_code,
                             'assessment_type': assessment_type,
-                            'academic_year': f"20{ay[:2]}/20{ay[2:]}" if ay else None,
+                            'academic_year': f"{ay[:2]}{ay[2:]}" if ay else None,
                             'semester': sem
                         }
                         logger.info(f"📊 Extracted metadata from filename: {metadata}")
@@ -1738,7 +1738,7 @@ async def upload_assessment(file: UploadFile = File(...), db: Session = Depends(
                         metadata = {
                             'course_code': course_code,
                             'assessment_type': assessment_type,
-                            'academic_year': f"20{ay[:2]}/20{ay[2:]}" if ay else None,
+                            'academic_year': f"{ay[:2]}{ay[2:]}" if ay else None,
                             'semester': sem
                         }
                         logger.info(f"✅ Parsed as questions file from pattern: {csv_file.name}")
@@ -1767,7 +1767,7 @@ async def upload_assessment(file: UploadFile = File(...), db: Session = Depends(
                 metadata = {
                     'course_code': course_code,
                     'assessment_type': assessment_type,
-                    'academic_year': f"20{ay[:2]}/20{ay[2:]}" if ay else None,
+                    'academic_year': f"{ay[:2]}{ay[2:]}" if ay else None,
                     'semester': sem
                 }
             else:
@@ -2330,7 +2330,7 @@ async def get_question_suggestions(id: str, db: Session = Depends(get_db), top_n
                 "version_number": candidate.version_number,
                 "is_latest": candidate.is_latest,
                 "previous_version_id": candidate.previous_version_id,
-                "similarity_score": round(float(similarities[idx]), 3)
+                "similarity_score": round(float(similarities[idx])*100, 2)
             })
         
         suggestions.sort(key=lambda x: x["similarity_score"], reverse=True)
