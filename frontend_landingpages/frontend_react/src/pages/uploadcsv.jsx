@@ -77,7 +77,7 @@ export function UploadCSV({ onBack }) {
       setUploadStatus({ status: "error", message: backendError });
     }
   };
-  
+
   // ---- Confirm Upload ----
   const handleConfirmUpload = async () => {
     if (!uploadId) {
@@ -144,39 +144,49 @@ export function UploadCSV({ onBack }) {
 
     {/* Main content */}
     <div className="w-full max-w-3xl px-4 py-8 space-y-8 flex flex-col items-center text-center">
-
       {/* Instructions */}
-      <Card className="w-full">
-        <CardHeader>
-          <CardTitle>CSV Template Instructions</CardTitle>
-          <CardDescription>Ensure your CSV/ZIP follows the format below:</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm text-gray-700">
-          <p className="font-semibold">Compulsory columns for Questions CSV:</p>
-          <ul className="list-disc list-inside">
-            <li>Context ID</li>
-            <li>Question Number</li>
-            <li>Question Text</li>
-            <li>Question Type</li>
-            <li>Correct Answer</li>
-          </ul>
-          <p className="font-semibold mt-2">Optional columns for Questions CSV:</p>
-          <ul className="list-disc list-inside">
-            <li>Sub-Question Number</li>
-            <li>Option A–E</li>
-            <li>Explanation</li>
-            <li>Points</li>
-            <li>Difficulty</li>
-            <li>Concepts</li>
-            <li>Attachment</li>
-          </ul>
-          <p className="font-semibold mt-2">Compulsory columns for Context CSV:</p>
-          <ul className="list-disc list-inside">
-            <li>Context ID</li>
-            <li>Context Text</li>
-          </ul>
-        </CardContent>
-      </Card>
+    <Card className="w-full text-center">
+      <CardHeader>
+        <CardTitle>📘 QuizBank Upload Summary</CardTitle>
+        <CardDescription>
+          Follow these key steps before uploading. You can also download the full template below.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="text-sm text-gray-700 space-y-3 text-center">
+        <p><strong>1️⃣ Upload Format</strong></p>
+        <ul className="list-disc list-inside ml-4">
+          <li><strong>Single questions.csv</strong> – for uploads without shared contexts or attachments.</li>
+          <li><strong>ZIP package</strong> – must include <code>questions.csv</code>; can also include <code>context.csv</code> and an <code>attachments/</code> folder.</li>
+        </ul>
+
+        <p><strong>2️⃣ File Naming</strong></p>
+        <p>Use: <code>COURSECODE_SemX_YYYY_AssessmentTitle_[questions|context].csv</code><br/>
+        Example: <code>DSA1101_Sem1_2425_Finals_questions.csv</code></p>
+
+        <p><strong>3️⃣ When to Include context.csv</strong></p>
+        <p>Add only if multiple questions share the same background text or dataset. Each context must have a unique <code>context_id</code>.</p>
+
+        <p><strong>4️⃣ Attachments</strong></p>
+        <ul className="list-disc list-inside ml-4">
+          <li>Put all files in an <code>attachments/</code> folder inside the ZIP.</li>
+          <li>Reference exact filenames in the <code>attachments</code> column.</li>
+          <li>Supported: images (.png, .jpg), docs (.pdf, .docx), data/code (.csv, .py, .r), etc.</li>
+        </ul>
+
+        <p><strong>5️⃣ Upload Steps</strong></p>
+        <ul className="list-decimal list-inside ml-4">
+          <li>Prepare <code>questions.csv</code> (and <code>context.csv</code> if needed).</li>
+          <li>Add any attachments.</li>
+          <li>ZIP everything if contexts or attachments exist.</li>
+          <li>Upload below — QuizBank will validate your file and show any errors.</li>
+        </ul>
+
+        <p className="mt-2 text-gray-600 italic">
+          📥 For detailed column descriptions, download the full <strong>Quiz Template</strong> below.
+        </p>
+      </CardContent>
+    </Card>
+
 
       {/* Metadata Preview */}
       {metadata && (
@@ -184,7 +194,7 @@ export function UploadCSV({ onBack }) {
           <CardHeader>
             <CardTitle>Metadata Preview</CardTitle>
             <CardDescription>
-              Metadata extracted automatically from uploaded file name
+              Ensure metadata is correct.
             </CardDescription>
           </CardHeader>
           <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4 text-center">
@@ -230,6 +240,7 @@ export function UploadCSV({ onBack }) {
         <Card className="w-full">
           <CardHeader>
             <CardTitle>Questions Preview ({questionsPreview.length})</CardTitle>
+            <li>Ensure that questions are correct before confirming upload. Otherwise, make edits to your files again.</li>
           </CardHeader>
 
           {uploadStatus.has_duplicates && (
