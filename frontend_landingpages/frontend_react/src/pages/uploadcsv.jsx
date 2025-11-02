@@ -6,6 +6,8 @@ import axios from "axios";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../components/dialog";
 
 
+console.log("UploadCSV component file loaded");
+
 export function UploadCSV({ onBack }) {
   const [uploadStatus, setUploadStatus] = useState({ status: "idle" });
   const [questionsPreview, setQuestionsPreview] = useState([]);
@@ -17,14 +19,14 @@ export function UploadCSV({ onBack }) {
   const [modalOpen, setModalOpen] = useState(false);
   const [modalType, setModalType] = useState("success"); // "success" | "error"
   const [modalMessage, setModalMessage] = useState("");
-
+  const [errorMessage, setErrorMessage] = useState("");
 
   // ---- File Upload ----
   const handleFileUpload = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
     setUploadStatus({ status: "uploading", message: "Uploading file..." });
-
+    setErrorMessage("");
 
     try {
       const formData = new FormData();
@@ -39,6 +41,7 @@ export function UploadCSV({ onBack }) {
       setQuestionsPreview(response.data.questions || []);
       setContextsPreview(response.data.contexts || []);
       setUploadId(response.data.upload_id);
+      
 
       // automatically extract metadata from backend response
       setMetadata({
@@ -48,29 +51,33 @@ export function UploadCSV({ onBack }) {
         semester: response.data.semester,
       });
 
+      //if duplicates found - show message
+      if (response.data.has_duplicates) {
+        setErrorMessage(
+          response.data.error_message ||
+            "Duplicate questions were found in your upload."
+        );
+      }
+
+
       setUploadStatus({
       status: "success",
-      message: response.data.error_message || "Preview loaded",
+      message:
+        response.data.error_message && !response.data.has_duplicates
+          ? response.data.error_message
+          : "Preview loaded",
       has_duplicates: response.data.has_duplicates,
-      duplicate_count: response.data.duplicate_count || 0
-    })
+      duplicate_count: response.data.duplicate_count || 0,
+    });
 
     } catch (err) {
-      console.error(err);
-      setUploadStatus({ status: "error", message: err.message || "Upload failed" });
+      console.error("❌ Upload failed:", err);
+      const backendError = err.response?.data?.detail || err.message || "Upload failed.";
+      setErrorMessage(backendError);
+      setUploadStatus({ status: "error", message: backendError });
     }
   };
-
-  //pop up notifs if duplicate questions
-    useEffect(() => {
-    if (uploadStatus.has_duplicates) {
-      setShowDuplicateToast(true);
-      const timer = setTimeout(() => setShowDuplicateToast(false), 8000); // auto-hide after 8s
-       alert("Duplicated questions in uploaded file!");
-      return () => clearTimeout(timer);
-    }
-  }, [uploadStatus]);
-
+  
   // ---- Confirm Upload ----
   const handleConfirmUpload = async () => {
     if (!uploadId) {
@@ -207,6 +214,18 @@ export function UploadCSV({ onBack }) {
       </Card>
 
       {/* Questions Preview */}
+      {errorMessage && (
+        <div className="bg-red-50 border-2 border-red-600 text-red-800 rounded-xl p-4 my-3 shadow-md">
+          <div className="flex items-center space-x-3 mb-2">
+            <div className="bg-red-600 text-white rounded-full w-7 h-7 flex items-center justify-center font-bold">
+              !
+            </div>
+            <h2 className="text-red-800 font-semibold text-lg">Upload Error</h2>
+          </div>
+          <p className="text-sm whitespace-pre-line">{errorMessage}</p>
+        </div>
+      )}
+
       {questionsPreview.length > 0 && (
         <Card className="w-full">
           <CardHeader>
@@ -214,21 +233,20 @@ export function UploadCSV({ onBack }) {
           </CardHeader>
 
           {uploadStatus.has_duplicates && (
-            <div className="bg-red-100 border-l-4 border-red-600 text-red-800 p-3 mt-2 mb-2 rounded">
+            <div className="bg-red-100 border-l-4 border-red-600 text-red-800 p-3 mt-2 mb-2 rounded text-left">
               <strong>⚠️ Duplicate questions detected!</strong>
-              <p className="text-sm mt-1">Please review before confirming upload.</p>
-              <ul className="list-disc list-inside text-sm mt-1">
-                {uploadStatus.duplicate_indices?.map(i => (
-                  <li key={i}>Q{i + 1}: {questionsPreview[i].question_text}</li>
-                ))}
-              </ul>
+              <p className="text-sm mt-1">
+                Some questions in your upload already exist in the system.  
+                Please review your file and remove the duplicates before confirming upload.
+              </p>
             </div>
           )}
+
 
           <CardContent className="space-y-4">
             {questionsPreview.map((q, i) => {
               const relatedContext = contextsPreview.find(c => c.context_id === q.context_id);
-              const isDuplicate = uploadStatus.has_duplicates && uploadStatus.duplicate_indices?.includes(i);
+              const isDuplicate = uploadStatus.has_duplicates;
 
               return (
                 <div key={i} className={`border p-3 rounded bg-white space-y-2 ${isDuplicate ? 'border-red-600 bg-red-50' : ''}`}>
@@ -241,7 +259,7 @@ export function UploadCSV({ onBack }) {
                   )}
                   <div className="text-center">
                     <p><strong>Q{i + 1}:</strong> {q.question_text}</p>
-                    <p className="text-sm text-gray-600">Type: {q.question_type} | Difficulty: {q.difficulty}</p>
+                     <p className="text-sm text-gray-600">Type: {q.question_type} | Difficulty: {q.difficulty}</p>
                     {q.options?.length > 0 && (
                       <ul className="list-disc list-inside text-sm">
                         {q.options.map((opt, idx) => <li key={idx}>{opt}</li>)}
