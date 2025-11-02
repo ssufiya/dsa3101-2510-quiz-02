@@ -10,18 +10,54 @@ import { Badge } from "../components/badge";
 import {
   ArrowLeft,
   Paperclip,
-  Notebook,
   GripVertical,
-  HelpCircle,
   ChevronDown,
   Plus,
   ShoppingBasket,
+  Eye,
+  HelpCircle,
 } from "lucide-react";
 import axios from "axios";
 
+/* ------------------------- Tooltip Component ------------------------- */
+function Tooltip({ text, children }) {
+  const [visible, setVisible] = useState(false);
+
+  return (
+    <div
+      style={{ position: "relative", display: "inline-block" }}
+      onMouseEnter={() => setVisible(true)}
+      onMouseLeave={() => setVisible(false)}
+    >
+      {children}
+      {visible && (
+        <div
+          style={{
+            position: "absolute",
+            bottom: "125%",
+            left: "50%",
+            transform: "translateX(-50%)",
+            backgroundColor: "#111827",
+            color: "white",
+            padding: "6px 8px",
+            borderRadius: "6px",
+            fontSize: "12px",
+            whiteSpace: "nowrap",
+            boxShadow: "0 2px 6px rgba(0, 0, 0, 0.15)",
+            zIndex: 100,
+          }}
+        >
+          {text}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ------------------------- MultiSelectDropdown ------------------------- */
-function MultiSelectDropdown({ label, options, selected, setSelected }) {
+function MultiSelectDropdown({ label, options, selected, setSelected, searchable = false }) {
   const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
 
   const toggleOption = (option) => {
     if (selected.includes(option)) {
@@ -30,6 +66,10 @@ function MultiSelectDropdown({ label, options, selected, setSelected }) {
       setSelected([...selected, option]);
     }
   };
+
+  const filteredOptions = searchable
+    ? options.filter((opt) => opt.toLowerCase().includes(search.toLowerCase()))
+    : options;
 
   return (
     <div style={{ position: "relative", width: "190px" }}>
@@ -49,29 +89,50 @@ function MultiSelectDropdown({ label, options, selected, setSelected }) {
             borderRadius: "6px",
             backgroundColor: "white",
             boxShadow: "0 4px 6px rgba(0,0,0,0.1)",
-            maxHeight: "240px",
+            maxHeight: "260px",
             overflowY: "auto",
           }}
         >
-          {options.map((option) => (
-            <label
-              key={option}
+          {searchable && (
+            <input
+              type="text"
+              placeholder="Search..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
               style={{
-                display: "flex",
-                alignItems: "center",
-                padding: "6px 8px",
-                cursor: "pointer",
+                width: "90%",
+                margin: "8px",
+                padding: "4px 8px",
+                border: "1px solid #ddd",
+                borderRadius: "4px",
+                fontSize: "14px",
               }}
-            >
-              <input
-                type="checkbox"
-                checked={selected.includes(option)}
-                onChange={() => toggleOption(option)}
-                style={{ marginRight: "6px" }}
-              />
-              {option}
-            </label>
-          ))}
+            />
+          )}
+
+          {filteredOptions.length === 0 ? (
+            <div style={{ padding: "8px 10px", color: "#888" }}>No matches found</div>
+          ) : (
+            filteredOptions.map((option) => (
+              <label
+                key={option}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  padding: "6px 8px",
+                  cursor: "pointer",
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={selected.includes(option)}
+                  onChange={() => toggleOption(option)}
+                  style={{ marginRight: "6px" }}
+                />
+                {option}
+              </label>
+            ))
+          )}
         </div>
       )}
     </div>
@@ -115,8 +176,7 @@ function SingleSelectDropdown({ label, options, selected, setSelected }) {
               style={{
                 padding: "8px 10px",
                 cursor: "pointer",
-                backgroundColor:
-                  selected === option ? "#f3f4f6" : "transparent",
+                backgroundColor: selected === option ? "#f3f4f6" : "transparent",
                 fontWeight: selected === option ? "500" : "400",
               }}
               onClick={() => handleSelect(option)}
@@ -135,7 +195,6 @@ function QuestionCard({ question, onQuestionDetails, onAddToCart, isInCart }) {
   return (
     <Card className="hover:shadow-lg transition-shadow">
       <CardHeader>
-        {/* Metadata */}
         <div className="flex justify-between items-start mb-3">
           <div className="flex items-center space-x-1 text-sm text-muted-foreground">
             <Paperclip className="h-4 w-4" />
@@ -147,7 +206,6 @@ function QuestionCard({ question, onQuestionDetails, onAddToCart, isInCart }) {
           </div>
         </div>
 
-        {/* Question text */}
         <div
           style={{
             textAlign: "center",
@@ -160,7 +218,6 @@ function QuestionCard({ question, onQuestionDetails, onAddToCart, isInCart }) {
           {question.question_text || "No question text available"}
         </div>
 
-        {/* Course + difficulty */}
         <div className="text-center text-sm text-muted-foreground mb-3">
           <div>Course Code: {question.course_code || "—"}</div>
           <div>
@@ -171,38 +228,6 @@ function QuestionCard({ question, onQuestionDetails, onAddToCart, isInCart }) {
               : "—"}
           </div>
         </div>
-
-        {/* Concepts */}
-        {Array.isArray(question.concepts) && question.concepts.length > 0 && (
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center",
-              flexWrap: "wrap",
-              marginBottom: "16px",
-              fontSize: "16px",
-              color: "#000",
-            }}
-          >
-            <span style={{ fontWeight: "500", marginRight: "8px" }}>Concepts:</span>
-            {question.concepts.slice(0, 3).map((tag, idx) => (
-              <span
-                key={idx}
-                style={{
-                  backgroundColor: "#f0f0f0",
-                  borderRadius: "16px",
-                  padding: "6px 12px",
-                  marginRight: "8px",
-                  fontSize: "14px",
-                  border: "1px solid #ddd",
-                }}
-              >
-                {tag.trim()}
-              </span>
-            ))}
-          </div>
-        )}
       </CardHeader>
 
       <CardContent>
@@ -213,7 +238,7 @@ function QuestionCard({ question, onQuestionDetails, onAddToCart, isInCart }) {
             className="flex-1"
             onClick={() => onQuestionDetails(question.question_id)}
           >
-            View Details
+            <Eye style={{ marginRight: "6px" }} className="h-3 w-3" /> View Details
           </Button>
           <Button
             size="sm"
@@ -250,10 +275,11 @@ export function QuestionLibrary({
 
   const difficulties = ["Low", "Med", "High"];
   const types = ["Code", "T/F", "MCQ", "MRQ", "SRQ"];
-  const courses = ["DSA1101", "IND5003", "ST1131", "ST2131", "ST2137"];
+  const courses = [
+    "DSA1101", "DSA2101", "DSA3101", "ST3131", "ST3248", "ST4253", "IND5003", "ST5201",
+  ];
   const matches = ["Match All", "Match Any"];
 
-  /* --- Fetch Questions (correct logic from first version) --- */
   const fetchQuestions = async (overrideFilters = {}) => {
     setLoading(true);
     try {
@@ -277,7 +303,6 @@ export function QuestionLibrary({
     }
   };
 
-  /* --- Auto-fetch on mount + event listener --- */
   useEffect(() => {
     fetchQuestions();
     const refreshHandler = () => fetchQuestions();
@@ -285,7 +310,6 @@ export function QuestionLibrary({
     return () => window.removeEventListener("refresh-questions", refreshHandler);
   }, []);
 
-  /* --- Helpers --- */
   const isInCart = (id) => cartQuestions.some((q) => q.question_id === id);
 
   const clearFilters = () => {
@@ -299,38 +323,35 @@ export function QuestionLibrary({
     fetchQuestions({});
   };
 
-  /* --- Render --- */
+  const removeFilterChip = (category, value) => {
+    setFilters((prev) => ({
+      ...prev,
+      [category]: prev[category].filter((item) => item !== value),
+    }));
+  };
+
   return (
     <div style={{ minHeight: "100vh", backgroundColor: "#f9fafb", display: "flex", flexDirection: "column" }}>
       {/* HEADER */}
-      <header style={{ backgroundColor: "white", borderBottom: "1px solid #e5e7eb", paddingBottom: "30px", }}>
+      <header style={{ backgroundColor: "white", borderBottom: "1px solid #e5e7eb", paddingBottom: "30px", paddingTop: "40px"}}>
         <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "0 24px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", height: "64px", position: "relative" }}>
-            {/* Left: Back */}
-            <div>
-              <Button variant="ghost" onClick={onBack}>
-                <ArrowLeft style={{ width: "16px", height: "16px", marginRight: "4px" }} />
-                Back to Dashboard
-              </Button>
-            </div>
+            <Button variant="ghost" onClick={onBack}>
+              <ArrowLeft style={{ width: "16px", height: "16px", marginRight: "4px" }} />
+              Back to Dashboard
+            </Button>
 
-            {/* Center: Title */}
             <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", textAlign: "center" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", marginTop: "30px"}}>
-                <div>
-                  <h1 style={{ fontSize: "50px", fontWeight: "600", margin: 0 }}>Question Library</h1>
-                  <p style={{ fontSize: "14px", color: "#6b7280",  marginTop: "8px", marginBottom: "20px"}}>Browse questions from the database</p>
-                </div>
-              </div>
+              <h1 style={{ fontSize: "50px", fontWeight: "600", margin: 0 }}>Question Library</h1>
+              <p style={{ fontSize: "14px", color: "#6b7280", marginTop: "8px", marginBottom: "20px" }}>
+                Browse questions from the database
+              </p>
             </div>
 
-            {/* Right: Cart */}
-            <div>
-              <Button variant="ghost" onClick={onGoToQuestionCart}>
-                <ShoppingBasket style={{ width: "18px", height: "18px", marginRight: "6px" }} />
-                Cart ({cartQuestions.length})
-              </Button>
-            </div>
+            <Button variant="ghost" onClick={onGoToQuestionCart}>
+              <ShoppingBasket style={{ width: "18px", height: "18px", marginRight: "6px" }} />
+              Cart ({cartQuestions.length})
+            </Button>
           </div>
         </div>
       </header>
@@ -348,10 +369,78 @@ export function QuestionLibrary({
       >
         <MultiSelectDropdown label="Select Difficulty" options={difficulties} selected={filters.difficulties} setSelected={(vals) => setFilters({ ...filters, difficulties: vals })} />
         <MultiSelectDropdown label="Select Type" options={types} selected={filters.types} setSelected={(vals) => setFilters({ ...filters, types: vals })} />
-        <MultiSelectDropdown label="Select Course" options={courses} selected={filters.courses} setSelected={(vals) => setFilters({ ...filters, courses: vals })} />
+        <MultiSelectDropdown label="Select Course" options={courses} selected={filters.courses} setSelected={(vals) => setFilters({ ...filters, courses: vals })} searchable={true} />
         <Input placeholder="Search for topic..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-64 rounded-lg text-center" />
-        <SingleSelectDropdown label="Filter by" options={["Match All", "Match Any"]} selected={filters.matchMode} setSelected={(val) => setFilters({ ...filters, matchMode: val })} />
+
+        {/* Match Mode with Tooltip */}
+        <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+          <SingleSelectDropdown
+            label="Match Mode"
+            options={matches}
+            selected={filters.matchMode}
+            setSelected={(val) => setFilters({ ...filters, matchMode: val })}
+          />
+          <Tooltip text="Match All: show only questions that meet all selected filters. Match Any: show questions matching at least one.">
+            <HelpCircle
+              style={{
+                width: "16px",
+                height: "16px",
+                color: "#9ca3af",
+                cursor: "pointer",
+              }}
+            />
+          </Tooltip>
+        </div>
       </div>
+
+      {/* Filter Chips */}
+      {(filters.difficulties.length > 0 ||
+        filters.types.length > 0 ||
+        filters.courses.length > 0) && (
+        <div
+          style={{
+            backgroundColor: "#fff",
+            borderBottom: "1px solid #e5e7eb",
+            padding: "12px 24px",
+            display: "flex",
+            alignItems: "center",
+            flexWrap: "wrap",
+            gap: "8px",
+          }}
+        >
+          <span style={{ fontWeight: "500", color: "#374151" }}>Active filters:</span>
+          {[...filters.difficulties.map((d) => ({ category: "difficulties", label: `Difficulty: ${d}` })),
+            ...filters.types.map((t) => ({ category: "types", label: `Type: ${t}` })),
+            ...filters.courses.map((c) => ({ category: "courses", label: `Course: ${c}` })),
+          ].map((chip, idx) => (
+            <span
+              key={idx}
+              style={{
+                backgroundColor: "#e0f2fe",
+                borderRadius: "16px",
+                padding: "4px 8px",
+                fontSize: "13px",
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+              }}
+            >
+              {chip.label}
+              <button
+                onClick={() => removeFilterChip(chip.category, chip.label.split(": ")[1])}
+                style={{
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  fontWeight: "bold",
+                }}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* ACTION BUTTONS */}
       <div
@@ -364,12 +453,8 @@ export function QuestionLibrary({
           gap: "12px",
         }}
       >
-        <Button onClick={() => fetchQuestions()}>
-          Filter
-        </Button> 
-        <Button variant="outline" onClick={clearFilters}>
-          Clear
-        </Button>
+        <Button onClick={() => fetchQuestions()}>Filter</Button>
+        <Button variant="outline" onClick={clearFilters}>Clear</Button>
       </div>
 
       {/* QUESTION GRID */}

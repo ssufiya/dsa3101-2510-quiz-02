@@ -77,6 +77,7 @@ export default function App() {
         onGoToUpload={goToUpload}
         onGoToQuestionLibrary={goToQuestionLibrary}
         onGoToQuestionCart={() => goToQuestionCart(false)} // from dashboard
+        cartQuestions={cartQuestions}
       />
     );
   }
