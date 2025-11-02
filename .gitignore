@@ -9,8 +9,8 @@ node_modules/
 .DS_Store
 __pycache__/
 *.pyc
-.env
 .env.local
+.Rhistory
 # Backups & storage (keep empty dir via .gitkeep)
 backend/backups/**
 !backend/backups/.gitkeep
