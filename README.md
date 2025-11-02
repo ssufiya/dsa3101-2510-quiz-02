@@ -2,7 +2,7 @@ A question bank management system for the NUS Department of Statistics & Data Sc
 
 **Getting Started**
 
-Prerequisites: Docker & Docker Compose installed
+Prerequisites: Docker Desktop
 
 In your terminal, run:
 
