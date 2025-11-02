@@ -17,7 +17,7 @@ For first time users (After _docker compose up_):
 _docker exec -it quizbank-backend bash_
 
 _python quizbank-db/scripts/init_db.py_
-# run inside the container, to exit type: exit 
+(To exit, type: _exit_)
 
 
 **To check if your application is running**
