@@ -368,7 +368,7 @@ export function QuestionDetails({
                         className="text-sm font-medium text-gray-700 italic"
                         style={{ marginRight: "4px" }}
                       >
-                        {Math.round(q.similarity_score)}% match
+                        {Math.round(q.similarity_score*100)}% match
                       </span>
                     </div>
 

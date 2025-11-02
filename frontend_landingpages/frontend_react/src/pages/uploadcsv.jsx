@@ -159,20 +159,14 @@ export function UploadCSV({ onBack }) {
             <p><strong>1️⃣ Upload Format</strong></p>
             <ul className="list-disc list-inside ml-4">
               <li><strong>Single questions.csv</strong> – for uploads without shared contexts or attachments.</li>
-              <li><strong>ZIP package</strong> – must include <code>questions.csv</code>; can also include <code>context.csv</code> and an <code>attachments/</code> folder.</li>
+              <li><strong>ZIP package</strong> – must include <code>questions.csv</code>; can also include <code>context.csv</code> </li>
             </ul>
             <p><strong>2️⃣ File Naming</strong></p>
             <p>Use: <code>COURSECODE_SemX_YYYY_AssessmentTitle_[questions|context].csv</code><br />
               Example: <code>DSA1101_Sem1_2425_Finals_questions.csv</code></p>
             <p><strong>3️⃣ When to Include context.csv</strong></p>
             <p>Add only if multiple questions share the same background text or dataset. Each context must have a unique <code>context_id</code>.</p>
-            <p><strong>4️⃣ Attachments</strong></p>
-            <ul className="list-disc list-inside ml-4">
-              <li>Put all files in an <code>attachments/</code> folder inside the ZIP.</li>
-              <li>Reference exact filenames in the <code>attachments</code> column.</li>
-              <li>Supported: images (.png, .jpg), docs (.pdf, .docx), data/code (.csv, .py, .r), etc.</li>
-            </ul>
-            <p><strong>5️⃣ Upload Steps</strong></p>
+            <p><strong>4️⃣ Upload Steps</strong></p>
             <ul className="list-decimal list-inside ml-4">
               <li>Prepare <code>questions.csv</code> (and <code>context.csv</code> if needed).</li>
               <li>Add any attachments.</li>
