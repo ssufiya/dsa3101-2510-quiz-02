@@ -289,7 +289,12 @@ export function QuestionLibrary({
           type: filters.types.length ? filters.types.join(",") : undefined,
           subject: filters.courses.length ? filters.courses.join(",") : undefined,
           topic: searchTerm || undefined,
-          match: filters.matchMode || undefined,
+          match:
+            filters.matchMode === "Match Any"
+              ? "any"
+              : filters.matchMode === "Match All"
+              ? "all"
+              : undefined,
           fuzzy: true,
           ...overrideFilters,
         },
