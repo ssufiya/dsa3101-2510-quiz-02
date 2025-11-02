@@ -2330,7 +2330,7 @@ async def get_question_suggestions(id: str, db: Session = Depends(get_db), top_n
                 "version_number": candidate.version_number,
                 "is_latest": candidate.is_latest,
                 "previous_version_id": candidate.previous_version_id,
-                "similarity_score": round(float(similarities[idx])*100, 2)
+                "similarity_score": round(float(similarities[idx]), 2)
             })
         
         suggestions.sort(key=lambda x: x["similarity_score"], reverse=True)
