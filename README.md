@@ -1,7 +1,9 @@
 A question bank management system for the NUS Department of Statistics & Data Science. Upload, manage, search, and version-control assessment questions with automated backup and restoration.
 
 **Getting Started**
+
 Prerequisites: Docker & Docker Compose installed
+
 For returning users: Run _docker compose down -v_ first to clean up
 
 In your terminal, run:
@@ -10,7 +12,9 @@ In your terminal, run:
 3. docker compose up --build
 
 **To check if your application is running**
+
 Navigate to http://localhost:5000/, you should see:
+
 {"message":"Quiz Bank API is running!","version":"1.0.0"}
 
 
@@ -24,14 +28,22 @@ API docs: https://localhost:5003/docs
 
 
 **To restore initial database state (204 questions) after uploading new questions**
+
 Step 1: Delete all backups and new attachments
+
 _rm -f backend/backups/quizbank/*.sql.gz_
+
 _rm -f backend/backups/assets/*.tgz_
+
 _rm -f backend/backups/assets/*.manifest.txt_
+
 _rm -rf backend/quizbank-db/storage/png/*_
+
 _rm -rf backend/quizbank-db/storage/other/*_
 
 Step 2: Rebuild from scratch
+
 _docker compose down -v_
+
 _docker compose up_
 
