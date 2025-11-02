@@ -24,7 +24,6 @@ export default function EditQuestion({ questionId, questionData, onBack, onSave 
   const [options, setOptions] = useState([]);
   const [tags, setTags] = useState("");
 
-  // --- Modal states ---
   const [modalOpen, setModalOpen] = useState(false);
   const [modalType, setModalType] = useState("success");
   const [modalMessage, setModalMessage] = useState("");
@@ -42,7 +41,6 @@ export default function EditQuestion({ questionId, questionData, onBack, onSave 
       setQuestionType(questionData.question_type || "MCQ");
       setAssessmentType(questionData.assessment_type || "");
       setPoints(questionData.points || 1);
-
       if (questionData.options && typeof questionData.options === "object") {
         setOptions(
           Object.entries(questionData.options).map(([key, value]) => ({
@@ -51,7 +49,6 @@ export default function EditQuestion({ questionId, questionData, onBack, onSave 
           }))
         );
       }
-
       if (Array.isArray(questionData.concepts)) {
         setTags(questionData.concepts.join(", "));
       } else {
@@ -66,21 +63,15 @@ export default function EditQuestion({ questionId, questionData, onBack, onSave 
     setOptions(updated);
   };
 
-  /* ------------------------------------------------------------
-   * 🧩 Step 1: Upload edit preview
-   * 🧩 Step 2: Confirm edit (commit new version)
-   * 🧩 Optional: Cancel edit upload
-   * ------------------------------------------------------------ */
   const handleSave = async () => {
     if (!questionText || !courseName || !courseCode) {
       setModalType("error");
-      setModalMessage("Please fill in all required fields (Course Name, Course Code, Question Text).");
+      setModalMessage("Please ensure all required fields (Course Name, Course Code, Question Text) are filled.");
       setModalOpen(true);
       return;
     }
 
-    const formattedDifficulty =
-      difficulty.charAt(0).toUpperCase() + difficulty.slice(1).toLowerCase();
+    const formattedDifficulty = difficulty.charAt(0).toUpperCase() + difficulty.slice(1).toLowerCase();
 
     const csvHeaders = [
       "question_text",
@@ -89,6 +80,7 @@ export default function EditQuestion({ questionId, questionData, onBack, onSave 
       "course_code",
       "assessment_type",
       "difficulty",
+      "question_type",
       "points",
       "concepts",
       ...options.map((opt) => `option_${opt.key.toLowerCase()}`),
@@ -101,6 +93,7 @@ export default function EditQuestion({ questionId, questionData, onBack, onSave 
       `"${courseCode}"`,
       `"${assessmentType}"`,
       `"${formattedDifficulty}"`,
+      `"${questionType}"`,
       points,
       `"${tags}"`,
       ...options.map((opt) => `"${opt.value.replace(/"/g, '""')}"`),
@@ -114,25 +107,21 @@ export default function EditQuestion({ questionId, questionData, onBack, onSave 
     let uploadId = null;
 
     try {
-      // 🔹 Step 1: Upload the edit preview
       const previewRes = await axios.post(
         `http://localhost:5003/api/questions/edit?id=${questionId}`,
         formData,
         { headers: { "Content-Type": "multipart/form-data" } }
       );
-
       uploadId = previewRes.data.upload_id;
-      if (!uploadId) throw new Error("No upload_id returned from preview step");
+      if (!uploadId) throw new Error("Please ensure either Course Code or Question Text is different.");
 
-      // 🔹 Step 2: Confirm the edit (commit to DB)
-      const confirmRes = await axios.post(
-        "http://localhost:5003/api/questions/confirm-edits",
-        { upload_id: uploadId }
-      );
+      const confirmRes = await axios.post("http://localhost:5003/api/questions/confirm-edits", {
+        upload_id: uploadId,
+      });
 
       if (confirmRes.data.success) {
         setModalType("success");
-        setModalMessage(`New version committed successfully!`);
+        setModalMessage("New version added successfully!");
       } else {
         throw new Error(confirmRes.data.message || "Confirm step failed");
       }
@@ -143,33 +132,28 @@ export default function EditQuestion({ questionId, questionData, onBack, onSave 
         onSave({}, questionId);
       }, 2500);
     } catch (err) {
-      const msg = err.response?.data?.detail || err.message || "Error updating question.";
+      const msg = err.response?.data?.detail || err.message || "Please ensure either Course Code or Question Text is different.";
       setModalType("error");
       setModalMessage(msg);
       setModalOpen(true);
 
-      // 🔹 Optional Step 3: Cancel the edit if preview started but confirm failed
       if (uploadId) {
         try {
           await axios.post("http://localhost:5003/api/questions/delete-edits", {
             upload_id: uploadId,
           });
-          console.log(`🗑️ Cancelled failed upload ${uploadId}`);
+          console.log(`🗑️ Cancelled failed upload ${uploadId}`);  // kept for debugging
         } catch (cancelErr) {
-          console.warn("Failed to cancel upload:", cancelErr.message);
+          console.warn("Failed to cancel upload:", cancelErr.message);  // kept for debugging
         }
       }
     }
   };
 
-  /* ------------------------------------------------------------
-   * 🧹 Cancel button handler (manual user cancel)
-   * ------------------------------------------------------------ */
-  const handleCancel = async () => {
-    setModalType("error");
-    setModalMessage("Edit upload cancelled by user.");
+  const handleCancel = () => {
+    setModalType("cancel");
+    setModalMessage("Upload Cancelled");
     setModalOpen(true);
-
     setTimeout(() => {
       setModalOpen(false);
       onBack();
@@ -178,7 +162,7 @@ export default function EditQuestion({ questionId, questionData, onBack, onSave 
 
   return (
     <>
-      {/* --- Page Header --- */}
+      {/* Header */}
       <div style={{ textAlign: "center", marginBottom: "20px", marginTop: "10px" }}>
         <h1 style={{ fontSize: "32px", fontWeight: "600", color: "#111827" }}>Edit Question</h1>
         <p style={{ color: "#6b7280", fontSize: "14px" }}>
@@ -186,7 +170,7 @@ export default function EditQuestion({ questionId, questionData, onBack, onSave 
         </p>
       </div>
 
-      {/* --- Main Card --- */}
+      {/* Form */}
       <Card style={{ padding: "16px" }}>
         <CardContent>
           <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
@@ -232,20 +216,13 @@ export default function EditQuestion({ questionId, questionData, onBack, onSave 
             <Textarea value={explanation} onChange={(e) => setExplanation(e.target.value)} />
 
             <label>Points</label>
-            <Input
-              type="number"
-              value={points}
-              onChange={(e) => setPoints(Number(e.target.value))}
-            />
+            <Input type="number" value={points} onChange={(e) => setPoints(Number(e.target.value))} />
 
             <label>Options</label>
             {options.map((opt, idx) => (
               <div key={idx} style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                 <span>{opt.key}.</span>
-                <Input
-                  value={opt.value}
-                  onChange={(e) => handleOptionChange(idx, e.target.value)}
-                />
+                <Input value={opt.value} onChange={(e) => handleOptionChange(idx, e.target.value)} />
               </div>
             ))}
 
@@ -253,16 +230,14 @@ export default function EditQuestion({ questionId, questionData, onBack, onSave 
             <Input value={tags} onChange={(e) => setTags(e.target.value)} />
 
             <div style={{ display: "flex", gap: "10px", marginTop: "16px" }}>
-              <Button onClick={handleSave}>Save / Upload New Version</Button>
-              <Button variant="secondary" onClick={handleCancel}>
-                Cancel
-              </Button>
+              <Button onClick={handleSave}>Save New Version</Button>
+              <Button variant="secondary" onClick={handleCancel}>Cancel</Button>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* --- Popup modal --- */}
+      {/* Modal */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent
           style={{
@@ -279,9 +254,13 @@ export default function EditQuestion({ questionId, questionData, onBack, onSave 
             style={{
               width: "500px",
               height: "300px",
-              backgroundColor: modalType === "success" ? "#16a34a" : "#dc2626",
+              backgroundColor:
+                modalType === "success" ? "#16a34a" : "#dc2626", 
               color: "white",
-              border: `4px solid ${modalType === "success" ? "#166534" : "#991b1b"}`,
+              border:
+                modalType === "success"
+                  ? "4px solid #166534"
+                  : "4px solid #991b1b",
               borderRadius: "16px",
               padding: "24px",
               boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
@@ -292,7 +271,11 @@ export default function EditQuestion({ questionId, questionData, onBack, onSave 
           >
             <DialogHeader>
               <DialogTitle style={{ color: "white", fontWeight: "600" }}>
-                {modalType === "success" ? "Upload Successful" : "Upload Failed / Cancelled"}
+                {modalType === "success"
+                  ? "Upload Successful"
+                  : modalType === "cancel"
+                  ? "Upload Cancelled"
+                  : "Upload Failed"}
               </DialogTitle>
               <DialogDescription style={{ color: "white", whiteSpace: "pre-line" }}>
                 {modalMessage}
