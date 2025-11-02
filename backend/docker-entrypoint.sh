@@ -13,13 +13,17 @@ until PGPASSWORD=$DB_PASSWORD psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -c 
 done
 echo "✓ Database is ready"
 
-# Run database initialization
-echo ""
-echo "Running database initialization..."
-python /app/quizbank-db/scripts/init_db.py
+# Run bootstrap (includes init, restore, sanitization, etc.)
+if [ -f /app/quizbank-db/scripts/bootstrap_db.sh ]; then
+  echo "Running bootstrap script..."
+  chmod +x /app/quizbank-db/scripts/*.sh
+  /app/quizbank-db/scripts/bootstrap_db.sh || echo "Bootstrap failed, continuing..."
+else
+  echo "Bootstrap script not found, running init_db.py manually..."
+  python /app/quizbank-db/scripts/init_db.py
+fi
 
 # Start the application
-echo ""
-echo "Starting FastAPI application..."
+echo "Starting FastAPI..."
 exec "$@"
 
