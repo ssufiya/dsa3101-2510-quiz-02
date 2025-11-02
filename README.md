@@ -14,10 +14,8 @@ In your terminal, run:
 
 
 **To check if your application is running**
+<img width="585" height="453" alt="image" src="https://github.com/user-attachments/assets/444222ff-cdd0-42e6-bd38-e360d2446113" />
 
-Navigate to http://localhost:5000/, you should see:
-
-{"message":"Quiz Bank API is running!","version":"1.0.0"}
 
 
 
