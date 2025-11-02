@@ -23,11 +23,11 @@ In your terminal, run:
 
 **Services you can access:**
 
-Frontend: https://localhost:3000
+Frontend: http://localhost:3000
 
-Backend: https://localhost:5003
+Backend: http://localhost:5003
 
-API docs: https://localhost:5003/docs
+API docs: http://localhost:5003/docs
 
 
 
