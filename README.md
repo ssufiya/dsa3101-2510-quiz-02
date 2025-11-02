@@ -10,7 +10,14 @@ For returning users: Run _docker compose down -v_ first to clean up
 In your terminal, run:
 1. git clone git@github.com:ssufiya/dsa3101-2510-quiz-02.git
 2. cd path/to/dsa3101-2510-quiz-02
-3. docker compose up --build
+3. _docker compose up --build_
+
+For first time users (After _docker compose up_):
+
+_docker exec -it quizbank-backend bash_
+
+_python quizbank-db/scripts/init_db.py_
+# run inside the container, to exit type: exit 
 
 
 **To check if your application is running**
@@ -23,11 +30,11 @@ In your terminal, run:
 
 **Services you can access:**
 
-Frontend: https://localhost:3000
+Frontend: http://localhost:3000
 
-Backend: https://localhost:5003
+Backend: http://localhost:5003
 
-API docs: https://localhost:5003/docs
+API docs: http://localhost:5003/docs
 
 
 
