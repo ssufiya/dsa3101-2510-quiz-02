@@ -39,9 +39,8 @@ services:
     ports:
       - "${BACKEND_PORT:-5000}:5000"
     env_file:
-      - .env  # Reads from root .env
+      - .env
     environment:
-      # Database connection (internal docker network)
       DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@db:5432/${DB_NAME:-quizbank}
       DB_HOST: db
       DB_PORT: 5432
@@ -50,41 +49,23 @@ services:
       PGPASSWORD: postgres
       DB_NAME: ${DB_NAME:-quizbank}
       PYTHONPATH: /app
-      # Bootstrap configuration
       RESTORE_IF_BACKUP: ${RESTORE_IF_BACKUP:-1}
       SEED_FORCE: ${SEED_FORCE:-0}
     volumes:
       - ./backend/app:/app/app:ro
-      # Attachments storage
       - ./backend/quizbank-db/attachment_storage:/app/quizbank-db/attachment_storage:rw
-      # Backup directories (shared with host)
       - ./backend/backups/quizbank:/app/backups/quizbank:rw
       - ./backend/backups/assets:/app/backups/assets:rw
-      # Database init scripts and data
       - ./backend/quizbank-db/db-init:/app/quizbank-db/db-init:ro
       - ./backend/quizbank-db/scripts:/app/quizbank-db/scripts
-      # Static files for templates (serves /download endpoint)
       - ./backend/quizbank-db/static:/app/quizbank-db/static:ro
-
     depends_on:
       db:
         condition: service_healthy
     networks:
       - quizbank-network
-    command: >
-      bash -c "
-        echo 'Waiting for database to be ready...' &&
-        sleep 5 &&
-        if [ -f /app/quizbank-db/scripts/bootstrap_db.sh ]; then
-          echo 'Running bootstrap script...' &&
-          chmod +x /app/quizbank-db/scripts/*.sh &&
-          /app/quizbank-db/scripts/bootstrap_db.sh || echo 'Bootstrap failed, continuing...';
-        fi &&
-        echo 'Starting FastAPI server...' &&
-        uvicorn app.main:app --host 0.0.0.0 --port 5000 --reload
-      "
 
-  # Frontend (commented out for now - uncomment when ready)
+  # Frontend
   frontend:
     build:
       context: ./frontend_landingpages/frontend_react
@@ -92,14 +73,13 @@ services:
     container_name: quizbank-frontend
     restart: unless-stopped
     ports:
-      - "${FRONTEND_PORT:-3000}:80"   # maps host 3000 → container port 80 (nginx)
+      - "${FRONTEND_PORT:-3000}:80"
     environment:
       - VITE_API_BASE_URL=http://backend:5000
     depends_on:
       - backend
     networks:
       - quizbank-network
-
 
 volumes:
   postgres_data:

@@ -16,9 +16,10 @@ echo "✓ Database is ready"
 # Run database initialization
 echo ""
 echo "Running database initialization..."
-python scripts/init_db.py
+python /app/quizbank-db/scripts/init_db.py
 
 # Start the application
 echo ""
 echo "Starting FastAPI application..."
 exec "$@"
+
